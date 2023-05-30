@@ -135,8 +135,32 @@ xs_str *html_actor_icon(xs_str *os, char *actor,
         }
 
         xs *s1 = xs_fmt(
-            "<br>\n<time class=\"dt-published snac-pubdate\" title=\"%s\">%s</time>\n",
+            "\n<time class=\"dt-published snac-pubdate\" title=\"%s\">%s</time>\n",
                 date_title, date_label);
+
+        s = xs_str_cat(s, s1);
+    }
+
+    {
+        char *username, *id;
+        xs *s1;
+
+        if (xs_is_null(username = xs_dict_get(actor, "preferredUsername")) || *username == '\0') {
+            /* This should never be reached */
+            username = "anonymous";
+        }
+
+        if (xs_is_null(id = xs_dict_get(actor, "id")) || *id == '\0') {
+            /* This should never be reached */
+            id = "https://social.example.org/anonymous";
+        }
+
+        /* "LIKE AN ANIMAL" */
+        xs *domain = xs_split(id, "/");
+
+        s1 = xs_fmt(
+            "<br><a href=\"%s\" class=\"p-author-tag h-card snac-author-tag\">%s</a>",
+                xs_dict_get(actor, "id"), xs_fmt("@%s@%s", username, xs_list_get(domain, 2)));
 
         s = xs_str_cat(s, s1);
     }
@@ -541,40 +565,10 @@ xs_str *build_mentions(snac *snac, const xs_dict *msg)
 
     if (*s) {
         xs *s1 = s;
-        s = xs_fmt("\n\nCC: %s", s1);
+        s = xs_fmt("\n\n\nCC: %s", s1);
     }
 
     return s;
-}
-
-
-xs_str *author_tag_get(snac *snac, const xs_dict *msg)
-{
-    char *actor_id, *username, *id;
-    xs_str *name = xs_str_new(NULL);
-    xs *actor = NULL;
-
-    if ((actor_id = xs_dict_get(msg, "attributedTo")) == NULL)
-        actor_id = xs_dict_get(msg, "actor");
-
-    if (actor_id && valid_status(actor_get(snac, actor_id, &actor))) {
-        if (xs_is_null(username = xs_dict_get(actor, "preferredUsername")) || *username == '\0') {
-            /* This should never be reached */
-            username = "anonymous";
-        }
-
-        if (xs_is_null(id = xs_dict_get(actor, "id")) || *id == '\0') {
-            /* This should never be reached */
-            id = "https://social.example.org/anonymous";
-        }
-
-        /* "LIKE AN ANIMAL" */
-        xs *domain = xs_split(id, "/");
-
-        name = xs_fmt("@%s@%s", username, xs_list_get(domain, 2));
-    }
-
-    return name;
 }
 
 
@@ -675,7 +669,6 @@ xs_str *html_entry_controls(snac *snac, xs_str *os, const xs_dict *msg, const ch
     {
         /* the post textarea */
         xs *ct = build_mentions(snac, msg);
-        xs *ct1 = author_tag_get(snac, msg);
 
         xs *s1 = xs_fmt(
             "<p><details><summary>%s</summary>\n"
@@ -683,7 +676,7 @@ xs_str *html_entry_controls(snac *snac, xs_str *os, const xs_dict *msg, const ch
             "<form method=\"post\" action=\"%s/admin/note\" "
             "enctype=\"multipart/form-data\" id=\"%s_reply_form\">\n"
             "<textarea class=\"snac-textarea\" name=\"content\" "
-            "rows=\"4\" wrap=\"virtual\" required=\"required\">%s %s</textarea>\n"
+            "rows=\"4\" wrap=\"virtual\" required=\"required\">%s</textarea>\n"
             "<input type=\"hidden\" name=\"in_reply_to\" value=\"%s\">\n"
 
             "<p>%s: <input type=\"checkbox\" name=\"sensitive\">\n"
@@ -700,7 +693,6 @@ xs_str *html_entry_controls(snac *snac, xs_str *os, const xs_dict *msg, const ch
             L("Reply..."),
             md5,
             snac->actor, md5,
-            ct1,
             ct,
             id,
             L("Sensitive content"),
