@@ -259,13 +259,12 @@ xs_list *recipient_list(snac *snac, const xs_dict *msg, int expand_public)
 /* returns the list of recipients for a message */
 {
     char *to = xs_dict_get(msg, "to");
-    char *cc = xs_dict_get(msg, "cc");
     xs_set rcpts;
     int n;
 
     xs_set_init(&rcpts);
 
-    char *lists[] = { to, cc, NULL };
+    char *lists[] = { to, NULL };
     for (n = 0; lists[n]; n++) {
         char *l = lists[n];
         char *v;
@@ -998,7 +997,7 @@ xs_dict *msg_note(snac *snac, const xs_str *content, const xs_val *rcpts,
     if (ctxt == NULL)
         ctxt = xs_fmt("%s#ctxt", id);
 
-    /* add all mentions to the cc */
+    /* add all mentions to the to */
     p = tag;
     while (xs_list_iter(&p, &v)) {
         if (xs_type(v) == XSTYPE_DICT) {
@@ -1006,14 +1005,14 @@ xs_dict *msg_note(snac *snac, const xs_str *content, const xs_val *rcpts,
 
             if ((t = xs_dict_get(v, "type")) != NULL && strcmp(t, "Mention") == 0) {
                 if ((t = xs_dict_get(v, "href")) != NULL)
-                    cc = xs_list_append(cc, t);
+                    to = xs_list_append(to, t);
             }
         }
     }
 
     /* no recipients? must be for everybody */
-    if (!priv && xs_list_len(to) == 0)
-        to = xs_list_append(to, public_address);
+    if (!priv && xs_list_len(cc) == 0)
+        cc = xs_list_append(cc, public_address);
 
     /* delete all cc recipients that also are in the to */
     p = to;
