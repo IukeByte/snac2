@@ -255,13 +255,16 @@ int send_to_actor(snac *snac, char *actor, char *msg, d_char **payload, int *p_s
 }
 
 
-xs_list *recipient_list(snac *snac, const xs_dict *msg, int expand_public)
+xs_list *recipient_list(snac *snac, const xs_dict *msg, int expand_public, int no_cc)
 /* returns the list of recipients for a message */
 {
     char *to = xs_dict_get(msg, "to");
-    char *cc = xs_dict_get(msg, "cc");
+    char *cc = NULL;
     xs_set rcpts;
     int n;
+
+    if (!no_cc)
+	    cc = xs_dict_get(msg, "cc");
 
     xs_set_init(&rcpts);
 
@@ -301,7 +304,7 @@ xs_list *recipient_list(snac *snac, const xs_dict *msg, int expand_public)
 int is_msg_public(snac *snac, const xs_dict *msg)
 /* checks if a message is public */
 {
-    xs *rcpts = recipient_list(snac, msg, 0);
+    xs *rcpts = recipient_list(snac, msg, 0, 0);
 
     return xs_list_in(rcpts, public_address) != -1;
 }
@@ -332,7 +335,7 @@ int is_msg_for_me(snac *snac, const xs_dict *c_msg)
         return 1;
 
     xs_dict *msg = xs_dict_get(c_msg, "object");
-    xs *rcpts = recipient_list(snac, msg, 0);
+    xs *rcpts = recipient_list(snac, msg, 0, 0);
     xs_list *p = rcpts;
     xs_str *v;
 
@@ -493,9 +496,24 @@ void notify(snac *snac, const char *type, const char *utype, const char *actor, 
 
     if (strcmp(type, "Create") == 0) {
         /* only notify of notes specifically for us */
-        xs *rcpts = recipient_list(snac, msg, 0);
 
-        if (xs_list_in(rcpts, snac->actor) == -1)
+        xs *rcpts = recipient_list(snac, msg, 0, 1);
+
+        xs *tags = xs_dict_get(msg, "tag");
+        xs *v;
+
+        int user_is_mentioned = 0;
+
+        while (xs_list_iter(&tags, &v)) {
+            xs *href = xs_dict_get(v, "href");
+
+            if (strcmp(href, snac->actor) == 0) {
+                user_is_mentioned = 1;
+                break;
+            }
+        }
+
+        if (xs_list_in(rcpts, snac->actor) == -1 && !user_is_mentioned)
             return;
 
         /* discard votes */
@@ -1551,7 +1569,7 @@ void process_user_queue_item(snac *snac, xs_dict *q_item)
 
     if (strcmp(type, "message") == 0) {
         xs_dict *msg = xs_dict_get(q_item, "message");
-        xs *rcpts    = recipient_list(snac, msg, 1);
+        xs *rcpts    = recipient_list(snac, msg, 1, 0);
         xs_set inboxes;
         xs_list *p;
         xs_str *actor;
