@@ -259,12 +259,13 @@ xs_list *recipient_list(snac *snac, const xs_dict *msg, int expand_public)
 /* returns the list of recipients for a message */
 {
     char *to = xs_dict_get(msg, "to");
+    char *cc = xs_dict_get(msg, "cc");
     xs_set rcpts;
     int n;
 
     xs_set_init(&rcpts);
 
-    char *lists[] = { to, NULL };
+    char *lists[] = { to, cc, NULL };
     for (n = 0; lists[n]; n++) {
         char *l = lists[n];
         char *v;
@@ -492,7 +493,7 @@ void notify(snac *snac, const char *type, const char *utype, const char *actor, 
 
     if (strcmp(type, "Create") == 0) {
         /* only notify of notes specifically for us */
-        xs *rcpts = recipient_list(snac, msg, 0);
+        xs *rcpts = xs_dict_get(msg, "to");
 
         if (xs_list_in(rcpts, snac->actor) == -1)
             return;
@@ -1011,8 +1012,8 @@ xs_dict *msg_note(snac *snac, const xs_str *content, const xs_val *rcpts,
     }
 
     /* no recipients? must be for everybody */
-    if (!priv && xs_list_len(cc) == 0)
-        cc = xs_list_append(cc, public_address);
+    if (!priv && xs_list_len(to) == 0)
+        to = xs_list_append(to, public_address);
 
     /* delete all cc recipients that also are in the to */
     p = to;
