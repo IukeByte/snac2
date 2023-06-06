@@ -998,7 +998,7 @@ xs_dict *msg_note(snac *snac, const xs_str *content, const xs_val *rcpts,
     if (ctxt == NULL)
         ctxt = xs_fmt("%s#ctxt", id);
 
-    /* add all mentions to the to */
+    /* add all mentions to the cc */
     p = tag;
     while (xs_list_iter(&p, &v)) {
         if (xs_type(v) == XSTYPE_DICT) {
@@ -1006,7 +1006,7 @@ xs_dict *msg_note(snac *snac, const xs_str *content, const xs_val *rcpts,
 
             if ((t = xs_dict_get(v, "type")) != NULL && strcmp(t, "Mention") == 0) {
                 if ((t = xs_dict_get(v, "href")) != NULL)
-                    to = xs_list_append(to, t);
+                    cc = xs_list_append(cc, t);
             }
         }
     }
