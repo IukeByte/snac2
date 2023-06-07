@@ -259,16 +259,13 @@ xs_list *recipient_list(snac *snac, const xs_dict *msg, int expand_public, int n
 /* returns the list of recipients for a message */
 {
     char *to = xs_dict_get(msg, "to");
-    char *cc = NULL;
+    char *cc = xs_dict_get(msg, "cc");
     xs_set rcpts;
     int n;
 
-    if (!no_cc)
-	    cc = xs_dict_get(msg, "cc");
-
     xs_set_init(&rcpts);
 
-    char *lists[] = { to, cc, NULL };
+    char *lists[] = { to, no_cc ? NULL : cc, NULL };
     for (n = 0; lists[n]; n++) {
         char *l = lists[n];
         char *v;
