@@ -504,14 +504,15 @@ void notify(snac *snac, const char *type, const char *utype, const char *actor, 
 
         int user_is_mentioned = 0;
 
-        while (xs_list_iter(&tags, &v)) {
-            xs *href = xs_dict_get(v, "href");
+        if (tags != NULL)
+            while (xs_list_iter(&tags, &v)) {
+                xs *href = xs_dict_get(v, "href");
 
-            if (strcmp(href, snac->actor) == 0) {
-                user_is_mentioned = 1;
-                break;
+                if (href != NULL && strcmp(href, snac->actor) == 0) {
+                    user_is_mentioned = 1;
+                    break;
+                }
             }
-        }
 
         if (xs_list_in(rcpts, snac->actor) == -1 && !user_is_mentioned)
             return;
