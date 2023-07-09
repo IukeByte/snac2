@@ -62,7 +62,7 @@ int webfinger_request_signed(snac *snac, const char *qs, char **actor, char **us
     else {
         xs_val *scheme = xs_dict_get(srv_config, "scheme_webfinger");
         if (scheme == NULL) scheme = "https";
-        xs *url = xs_cat(scheme, "://", host, "/.well-known/webfinger?resource=", resource);
+        xs *url = xs_cat(scheme, "://", host, "/.well-known/webfinger?resource=", resource, NULL);
 
         if (snac == NULL)
             xs_http_request("GET", url, headers, NULL, 0, &status, &payload, &p_size, 0);
