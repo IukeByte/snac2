@@ -4,6 +4,10 @@
 
 #define _XS_JSON_H
 
+#ifndef _XS_H
+#error You must include xs.h first.
+#endif
+
 #include <stdbool.h>
 
 xs_str *xs_json_dumps_pp(const xs_val *data, int indent);
