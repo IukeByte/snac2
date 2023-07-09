@@ -14,11 +14,11 @@
 #include <stdlib.h>
 
 const char *default_srv_config = "{"
-    "\"scheme\":               \"https\","
+    "\"scheme\":               \"https\", # scheme to link in html and json replies"
     "\"host\":                 \"\","
     "\"prefix\":               \"\","
     "\"address\":              \"127.0.0.1\","
-    "\"port\":                 8001,"
+    "\"port\":                 8001,   # this will always be http, please close port in firewall"
     "\"layout\":               0.0,"
     "\"dbglevel\":             0,"
     "\"queue_retry_minutes\":  2,"
@@ -103,7 +103,7 @@ int snac_init(const char *basedir)
         return 1;
     }
 
-    srv_config = xs_json_loads(default_srv_config);
+    srv_config = xs_json_loadsC(default_srv_config, true);
 
     xs *layout = xs_number_new(disk_layout);
     srv_config = xs_dict_set(srv_config, "layout", layout);

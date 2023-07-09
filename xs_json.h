@@ -4,9 +4,12 @@
 
 #define _XS_JSON_H
 
+#include <stdbool.h>
+
 xs_str *xs_json_dumps_pp(const xs_val *data, int indent);
 #define xs_json_dumps(data) xs_json_dumps_pp(data, 0)
-xs_val *xs_json_loads(const xs_str *json);
+xs_val *xs_json_loadsC(const xs_str *json, bool allow_yaml_comments);
+#define xs_json_loads(json) xs_json_loadsC(json, false)
 
 
 #ifdef XS_IMPLEMENTATION
@@ -171,6 +174,7 @@ xs_str *xs_json_dumps_pp(const xs_val *data, int indent)
 
 typedef enum {
     JS_ERROR = -1,
+    JS_COMMENT,
     JS_INCOMPLETE,
     JS_OCURLY,
     JS_OBRACK,
@@ -190,15 +194,23 @@ typedef enum {
 } js_type;
 
 
-static xs_val *_xs_json_loads_lexer(const char **json, js_type *t)
+static xs_val *_xs_json_loads_lexer(const char **json, js_type *t, bool y_com)
 {
     char c;
     const char *s = *json;
     xs_val *v = NULL;
 
     /* skip blanks */
-    while (*s == L' ' || *s == L'\t' || *s == L'\n' || *s == L'\r')
-        s++;
+    while(true) {
+        while (*s == L' ' || *s == L'\t' || *s == L'\n' || *s == L'\r')
+            s++;
+        if (!y_com)
+            break;
+        if (*s != L'#')
+            break;
+        while (*s != L'\n' && *s != L'\r')
+            s++;
+    };
 
     c = *s++;
 
@@ -349,17 +361,17 @@ static xs_val *_xs_json_loads_lexer(const char **json, js_type *t)
 }
 
 
-static xs_list *_xs_json_loads_array(const char **json, js_type *t);
-static xs_dict *_xs_json_loads_object(const char **json, js_type *t);
+static xs_list *_xs_json_loads_array(const char **json, js_type *t, bool y_com);
+static xs_dict *_xs_json_loads_object(const char **json, js_type *t, bool y_com);
 
-static xs_val *_xs_json_loads_value(const char **json, js_type *t, xs_val *v)
+static xs_val *_xs_json_loads_value(const char **json, js_type *t, xs_val *v, bool y_com)
 /* parses a JSON value */
 {
     if (*t == JS_OBRACK)
-        v = _xs_json_loads_array(json, t);
+        v = _xs_json_loads_array(json, t, y_com);
     else
     if (*t == JS_OCURLY)
-        v = _xs_json_loads_object(json, t);
+        v = _xs_json_loads_object(json, t, y_com);
 
     if (*t >= JS_VALUE)
         *t = JS_VALUE;
@@ -370,7 +382,7 @@ static xs_val *_xs_json_loads_value(const char **json, js_type *t, xs_val *v)
 }
 
 
-static xs_list *_xs_json_loads_array(const char **json, js_type *t)
+static xs_list *_xs_json_loads_array(const char **json, js_type *t, bool y_com)
 /* parses a JSON array */
 {
     const char *s = *json;
@@ -382,18 +394,18 @@ static xs_list *_xs_json_loads_array(const char **json, js_type *t)
 
     *t = JS_INCOMPLETE;
 
-    v = _xs_json_loads_lexer(&s, &tt);
+    v = _xs_json_loads_lexer(&s, &tt, y_com);
 
     if (tt == JS_CBRACK)
         *t = JS_ARRAY;
     else {
-        v = _xs_json_loads_value(&s, &tt, v);
+        v = _xs_json_loads_value(&s, &tt, v, y_com);
 
         if (tt == JS_VALUE) {
             l = xs_list_append(l, v);
 
             while (*t == JS_INCOMPLETE) {
-                xs_free(_xs_json_loads_lexer(&s, &tt));
+                xs_free(_xs_json_loads_lexer(&s, &tt, y_com));
 
                 if (tt == JS_CBRACK)
                     *t = JS_ARRAY;
@@ -401,8 +413,8 @@ static xs_list *_xs_json_loads_array(const char **json, js_type *t)
                 if (tt == JS_COMMA) {
                     xs *v2;
 
-                    v2 = _xs_json_loads_lexer(&s, &tt);
-                    v2 = _xs_json_loads_value(&s, &tt, v2);
+                    v2 = _xs_json_loads_lexer(&s, &tt, y_com);
+                    v2 = _xs_json_loads_value(&s, &tt, v2, y_com);
 
                     if (tt == JS_VALUE)
                         l = xs_list_append(l, v2);
@@ -426,7 +438,7 @@ static xs_list *_xs_json_loads_array(const char **json, js_type *t)
 }
 
 
-static xs_dict *_xs_json_loads_object(const char **json, js_type *t)
+static xs_dict *_xs_json_loads_object(const char **json, js_type *t, bool y_com)
 /* parses a JSON object */
 {
     const char *s = *json;
@@ -438,40 +450,40 @@ static xs_dict *_xs_json_loads_object(const char **json, js_type *t)
 
     *t = JS_INCOMPLETE;
 
-    k1 = _xs_json_loads_lexer(&s, &tt);
+    k1 = _xs_json_loads_lexer(&s, &tt, y_com);
 
     if (tt == JS_CCURLY)
         *t = JS_OBJECT;
     else
     if (tt == JS_STRING) {
-        xs_free(_xs_json_loads_lexer(&s, &tt));
+        xs_free(_xs_json_loads_lexer(&s, &tt, y_com));
 
         if (tt == JS_COLON) {
             xs *v1;
 
-            v1 = _xs_json_loads_lexer(&s, &tt);
-            v1 = _xs_json_loads_value(&s, &tt, v1);
+            v1 = _xs_json_loads_lexer(&s, &tt, y_com);
+            v1 = _xs_json_loads_value(&s, &tt, v1, y_com);
 
             if (tt == JS_VALUE) {
                 d = xs_dict_append(d, k1, v1);
 
                 while (*t == JS_INCOMPLETE) {
-                    xs_free(_xs_json_loads_lexer(&s, &tt));
+                    xs_free(_xs_json_loads_lexer(&s, &tt, y_com));
 
                     if (tt == JS_CCURLY)
                         *t = JS_OBJECT;
                     else
                     if (tt == JS_COMMA) {
-                        xs *k = _xs_json_loads_lexer(&s, &tt);
+                        xs *k = _xs_json_loads_lexer(&s, &tt, y_com);
 
                         if (tt == JS_STRING) {
-                            xs_free(_xs_json_loads_lexer(&s, &tt));
+                            xs_free(_xs_json_loads_lexer(&s, &tt, y_com));
 
                             if (tt == JS_COLON) {
                                 xs *v;
 
-                                v = _xs_json_loads_lexer(&s, &tt);
-                                v = _xs_json_loads_value(&s, &tt, v);
+                                v = _xs_json_loads_lexer(&s, &tt, y_com);
+                                v = _xs_json_loads_value(&s, &tt, v, y_com);
 
                                 if (tt == JS_VALUE)
                                     d = xs_dict_append(d, k, v);
@@ -506,19 +518,19 @@ static xs_dict *_xs_json_loads_object(const char **json, js_type *t)
 }
 
 
-xs_val *xs_json_loads(const xs_str *json)
+xs_val *xs_json_loadsC(const xs_str *json, bool y_com)
 /* loads a string in JSON format and converts to a multiple data */
 {
     xs_val *v = NULL;
     js_type t;
 
-    xs_free(_xs_json_loads_lexer(&json, &t));
+    xs_free(_xs_json_loads_lexer(&json, &t, y_com));
 
     if (t == JS_OBRACK)
-        v = _xs_json_loads_array(&json, &t);
+        v = _xs_json_loads_array(&json, &t, y_com);
     else
     if (t == JS_OCURLY)
-        v = _xs_json_loads_object(&json, &t);
+        v = _xs_json_loads_object(&json, &t, y_com);
     else
         t = JS_ERROR;
 

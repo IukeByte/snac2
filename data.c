@@ -53,7 +53,7 @@ int srv_open(char *basedir, int auto_upgrade)
         fclose(f);
 
         /* parse */
-        srv_config = xs_json_loads(cfg_data);
+        srv_config = xs_json_loadsC(cfg_data, true);
 
         if (srv_config == NULL)
             error = xs_fmt("ERROR: cannot parse '%s'", cfg_file);
