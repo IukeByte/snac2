@@ -15,6 +15,7 @@
 
 const char *default_srv_config = "{"
     "\"scheme\":               \"https\", # scheme to link in html and json replies"
+    "\"scheme_webfinger\":     \"https\", # scheme to use in webfinger requests - this must be https (RFC 7033)"
     "\"host\":                 \"\","
     "\"prefix\":               \"\","
     "\"address\":              \"127.0.0.1\","
