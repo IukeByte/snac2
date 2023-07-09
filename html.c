@@ -81,8 +81,6 @@ xs_str *actor_name(xs_dict *actor)
 xs_str *html_actor_icon(xs_str *os, char *actor,
     const char *date, const char *udate, const char *url, int priv)
 {
-    xs *s = xs_str_new(NULL);
-
     xs *avatar = NULL;
     char *v;
 
@@ -97,31 +95,19 @@ xs_str *html_actor_icon(xs_str *os, char *actor,
     if (avatar == NULL)
         avatar = xs_fmt("data:image/png;base64, %s", default_avatar_base64());
 
-    {
-        xs *s1 = xs_fmt("<p><img class=\"snac-avatar\" src=\"%s\" alt=\"\" "
-                        "loading=\"lazy\"/>\n", avatar);
-        s = xs_str_cat(s, s1);
-    }
+    xs *s_url;
+    if (!xs_is_null(url))
+        s_url = xs_cat(" <a href=\"",url,"\">»</a>", NULL);
+    else
+        s_url = xs_str_new("");
 
-    {
-        xs *s1 = xs_fmt("<a href=\"%s\" class=\"p-author h-card snac-author\">%s</a>",
-            xs_dict_get(actor, "id"), name);
-        s = xs_str_cat(s, s1);
-    }
 
-    if (!xs_is_null(url)) {
-        xs *s1 = xs_fmt(" <a href=\"%s\">»</a>", url);
-        s = xs_str_cat(s, s1);
-    }
-
-    if (priv)
-        s = xs_str_cat(s, " <span title=\"private\">&#128274;</span>");
-
-    if (strcmp(xs_dict_get(actor, "type"), "Service") == 0)
-        s = xs_str_cat(s, " <span title=\"bot\">&#129302;</span>");
-
+    xs_val *s_priv = priv ? " <span title=\"private\">&#128274;</span>" : "";
+    xs_val *s_bot = (strcmp(xs_dict_get(actor, "type"), "Service") == 0)
+                    ? " <span title=\"bot\">&#129302;</span>" : "";
+    xs * s_date;
     if (xs_is_null(date)) {
-        s = xs_str_cat(s, "\n&nbsp;\n");
+        s_date = xs_str_new("\n&nbsp;\n");
     }
     else {
         xs *date_label = xs_crop_i(xs_dup(date), 0, 10);
@@ -137,16 +123,14 @@ xs_str *html_actor_icon(xs_str *os, char *actor,
             date_title = xs_str_cat(date_title, udate);
         }
 
-        xs *s1 = xs_fmt(
-            "\n<time class=\"dt-published snac-pubdate\" title=\"%s\">%s</time>\n",
-                date_title, date_label);
-
-        s = xs_str_cat(s, s1);
+        s_date = xs_cat(
+            "\n<time class=\"dt-published snac-pubdate\" title=\"",date_title,"\">",date_label,"</time>\n",
+            NULL);
     }
 
+    xs *user;
     {
         char *username, *id;
-        xs *s1;
 
         if (xs_is_null(username = xs_dict_get(actor, "preferredUsername")) || *username == '\0') {
             /* This should never be reached */
@@ -160,16 +144,20 @@ xs_str *html_actor_icon(xs_str *os, char *actor,
 
         /* "LIKE AN ANIMAL" */
         xs *domain = xs_split(id, "/");
-        xs *user   = xs_fmt("@%s@%s", username, xs_list_get(domain, 2));
+        user       = xs_fmt("@%s@%s", username, xs_list_get(domain, 2));
 
-        s1 = xs_fmt(
-            "<br><a href=\"%s\" class=\"p-author-tag h-card snac-author-tag\">%s</a>",
-                xs_dict_get(actor, "id"), user);
-
-        s = xs_str_cat(s, s1);
     }
 
-    return xs_str_cat(os, s);
+    return xs_cat(
+        os,
+        "<p><img class=\"snac-avatar\" src=\"",
+        avatar,
+        "\" alt=\"\" ""loading=\"lazy\"/>\n"
+        "<a href=\"",xs_dict_get(actor, "id"),"\" class=\"p-author h-card snac-author\">",name,"</a>",
+        url,
+        s_priv, s_bot, s_date,"<br>"
+        "<a href=\"",xs_dict_get(actor, "id"),"\" class=\"p-author-tag h-card snac-author-tag\">",user,"</a>",
+        NULL);
 }
 
 
