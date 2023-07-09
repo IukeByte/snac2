@@ -380,103 +380,6 @@ d_char *html_user_header(snac *snac, d_char *s, int local)
 d_char *html_top_controls(snac *snac, d_char *s)
 /* generates the top controls */
 {
-    char *_tmpl =
-        "<div class=\"snac-top-controls\">\n"
-
-        "<div class=\"snac-note\">\n"
-        "<form autocomplete=\"off\" method=\"post\" "
-        "action=\"%s/admin/note\" enctype=\"multipart/form-data\">\n"
-        "<textarea class=\"snac-textarea\" name=\"content\" "
-        "rows=\"8\" wrap=\"virtual\" required=\"required\"></textarea>\n"
-        "<input type=\"hidden\" name=\"in_reply_to\" value=\"\">\n"
-        "<p>%s: <input type=\"checkbox\" name=\"sensitive\"> "
-        "<input type=\"text\" name=\"summary\" placeholder=\"%s\">\n"
-        "<p>%s: <input type=\"checkbox\" name=\"mentioned_only\">\n"
-
-        "<details><summary>%s</summary>\n" /** attach **/
-        "<p>%s: <input type=\"file\" name=\"attach\">\n"
-        "<p>%s: <input type=\"text\" name=\"alt_text\">\n"
-        "</details>\n"
-
-        "<p>"
-        "<details><summary>%s</summary>\n" /** poll **/
-        "<p>%s:<br>\n"
-        "<textarea class=\"snac-textarea\" name=\"poll_options\" "
-        "rows=\"6\" wrap=\"virtual\"></textarea>\n"
-        "<p><select name=\"poll_multiple\">\n"
-        "<option value=\"off\">%s</option>\n"
-        "<option value=\"on\">%s</option>\n"
-        "</select>\n"
-        "<select name=\"poll_end_secs\" id=\"poll_end_secs\">\n"
-        "<option value=\"300\">%s</option>\n"
-        "<option value=\"3600\">%s</option>\n"
-        "<option value=\"86400\">%s</option>\n"
-        "</select>\n"
-        "</details>\n"
-
-        "<p><input type=\"submit\" class=\"button\" value=\"%s\">\n"
-        "</form><p>\n"
-        "</div>\n"
-
-        "<div class=\"snac-top-controls-more\">\n"
-        "<details><summary>%s</summary>\n"
-
-        "<form autocomplete=\"off\" method=\"post\" action=\"%s/admin/action\">\n" /** follow **/
-        "<input type=\"text\" name=\"actor\" required=\"required\">\n"
-        "<input type=\"submit\" name=\"action\" value=\"%s\"> %s\n"
-        "</form><p>\n"
-
-        "<form autocomplete=\"off\" method=\"post\" action=\"%s/admin/action\">\n" /** boost **/
-        "<input type=\"text\" name=\"id\" required=\"required\">\n"
-        "<input type=\"submit\" name=\"action\" value=\"%s\"> %s\n"
-        "</form><p>\n"
-
-        "<details><summary>%s</summary>\n"
-
-        "<div class=\"snac-user-setup\">\n" /** user setup **/
-        "<form autocomplete=\"off\" method=\"post\" "
-        "action=\"%s/admin/user-setup\" enctype=\"multipart/form-data\">\n"
-        "<p>%s:<br>\n"
-        "<input type=\"text\" name=\"name\" value=\"%s\"></p>\n"
-
-        "<p>%s: <input type=\"file\" name=\"avatar_file\"></p>\n"
-
-        "<p>%s:<br>\n"
-        "<textarea name=\"bio\" cols=\"40\" rows=\"4\">%s</textarea></p>\n"
-
-        "<p><input type=\"checkbox\" name=\"cw\" id=\"cw\" %s>\n"
-        "<label for=\"cw\">%s</label></p>\n"
-
-        "<p>%s:<br>\n"
-        "<input type=\"text\" name=\"email\" value=\"%s\"></p>\n"
-
-        "<p>%s:<br>\n"
-        "<input type=\"text\" name=\"telegram_bot\" placeholder=\"Bot API key\" value=\"%s\"> "
-        "<input type=\"text\" name=\"telegram_chat_id\" placeholder=\"Chat id\" value=\"%s\"></p>\n"
-
-        "<p>%s:<br>\n"
-        "<input type=\"number\" name=\"purge_days\" value=\"%s\"></p>\n"
-
-        "<p><input type=\"checkbox\" name=\"drop_dm_from_unknown\" id=\"drop_dm_from_unknown\" %s>\n"
-        "<label for=\"drop_dm_from_unknown\">%s</label></p>\n"
-
-        "<p><input type=\"checkbox\" name=\"bot\" id=\"bot\" %s>\n"
-        "<label for=\"bot\">%s</label></p>\n"
-
-        "<p>%s:<br>\n"
-        "<input type=\"password\" name=\"passwd1\" value=\"\"></p>\n"
-
-        "<p>%s:<br>\n"
-        "<input type=\"password\" name=\"passwd2\" value=\"\"></p>\n"
-
-        "<input type=\"submit\" class=\"button\" value=\"%s\">\n"
-        "</form>\n"
-
-        "</div>\n"
-        "</details>\n"
-        "</details>\n"
-        "</div>\n"
-        "</div>\n";
 
     const char *email = "[disabled by admin]";
 
@@ -512,73 +415,118 @@ d_char *html_top_controls(snac *snac, d_char *s)
 
     const char *bot = xs_dict_get(snac->config, "bot");
 
-    xs *s1 = xs_fmt(_tmpl,
-        snac->actor,
-        L("Sensitive content"),
-        L("Sensitive content description"),
-        L("Only for mentioned people"),
+    return xs_cat(
+        s,
+        "<div class=\"snac-top-controls\">\n"
 
-        L("Attach..."),
-        L("File"),
-        L("File description"),
+        "<div class=\"snac-note\">\n"
+        "<form autocomplete=\"off\" method=\"post\" "
+        "action=\"",snac->actor,"/admin/note\" enctype=\"multipart/form-data\">\n"
+        "<textarea class=\"snac-textarea\" name=\"content\" "
+        "rows=\"8\" wrap=\"virtual\" required=\"required\"></textarea>\n"
+        "<input type=\"hidden\" name=\"in_reply_to\" value=\"\">\n"
+        "<p>",L("Sensitive content"),": <input type=\"checkbox\" name=\"sensitive\"> "
+        "<input type=\"text\" name=\"summary\" placeholder=\"",L("Sensitive content description"),"\">\n"
+        "<p>",L("Only for mentioned people"),": <input type=\"checkbox\" name=\"mentioned_only\">\n"
 
-        L("Poll..."),
-        L("Poll options (one per line, up to 8)"),
-        L("One choice"),
-        L("Multiple choices"),
-        L("End in 5 minutes"),
-        L("End in 1 hour"),
-        L("End in 1 day"),
+        "<details><summary>",L("Attach..."),"</summary>\n"         /** attach **/
+        "<p>",L("File"),": <input type=\"file\" name=\"attach\">\n"
+        "<p>",L("File description"),": <input type=\"text\" name=\"alt_text\">\n"
+        "</details>\n"
 
-        L("Post"),
+        "<p>"
+        "<details><summary>",L("Poll..."),"</summary>\n"           /** poll **/
+        "<p>",L("Poll options (one per line, up to 8)"),":<br>\n"
+        "<textarea class=\"snac-textarea\" name=\"poll_options\" "
+        "rows=\"6\" wrap=\"virtual\"></textarea>\n"
+        "<p><select name=\"poll_multiple\">\n"
+        "<option value=\"off\">",L("One choice"),"</option>\n"
+        "<option value=\"on\">",L("Multiple choices"),"</option>\n"
+        "</select>\n"
+        "<select name=\"poll_end_secs\" id=\"poll_end_secs\">\n"
+        "<option value=\"300\">",L("End in 5 minutes"),"</option>\n"
+        "<option value=\"3600\">",L("End in 1 hour"),"</option>\n"
+        "<option value=\"86400\">",L("End in 1 day"),"</option>\n"
+        "</select>\n"
+        "</details>\n"
 
-        L("More options..."),
+        "<p><input type=\"submit\" class=\"button\" value=\"",L("Post"),"\">\n"
+        "</form><p>\n"
+        "</div>\n"
 
-        snac->actor,
-        L("Follow"), L("(by URL or user@host)"),
+        "<div class=\"snac-top-controls-more\">\n"
+        "<details><summary>",L("More options..."),"</summary>\n"
 
-        snac->actor,
-        L("Boost"), L("(by URL)"),
+        "<form autocomplete=\"off\" method=\"post\" action=\"",snac->actor,"/admin/action\">\n" /** follow **/
+        "<input type=\"text\" name=\"actor\" required=\"required\">\n"
+        "<input type=\"submit\" name=\"action\" value=\"",L("Follow"),"\"> ",L("(by URL or user@host)"),"\n"
+        "</form><p>\n"
 
-        L("User setup..."),
-        snac->actor,
-        L("User name"),
-        xs_dict_get(snac->config, "name"),
-        L("Avatar"),
-        L("Bio"),
-        xs_dict_get(snac->config, "bio"),
-        strcmp(cw, "open") == 0 ? "checked" : "",
-        L("Always show sensitive content"),
-        L("Email address for notifications"),
-        email,
-        L("Telegram notifications (bot key and chat id)"),
-        telegram_bot,
-        telegram_chat_id,
-        L("Maximum days to keep posts (0: server settings)"),
-        purge_days,
-        xs_type(d_dm_f_u) == XSTYPE_TRUE ? "checked" : "",
-        L("Drop direct messages from people you don't follow"),
-        xs_type(bot) == XSTYPE_TRUE ? "checked" : "",
-        L("This account is a bot"),
-        L("Password (only to change it)"),
-        L("Repeat Password"),
-        L("Update user info")
+        "<form autocomplete=\"off\" method=\"post\" action=\"",snac->actor,"/admin/action\">\n" /** boost **/
+        "<input type=\"text\" name=\"id\" required=\"required\">\n"
+        "<input type=\"submit\" name=\"action\" value=\"",L("Boost"),"\"> ",L("(by URL)"),"\n"
+        "</form><p>\n"
+
+        "<details><summary>",L("User setup..."),"</summary>\n"
+
+        "<div class=\"snac-user-setup\">\n" /** user setup **/
+        "<form autocomplete=\"off\" method=\"post\" "
+        "action=\"",snac->actor,"/admin/user-setup\" enctype=\"multipart/form-data\">\n"
+        "<p>",L("User name"),":<br>\n"
+        "<input type=\"text\" name=\"name\" value=\"",xs_dict_get(snac->config, "name"),"\"></p>\n"
+
+        "<p>",L("Avatar"),": <input type=\"file\" name=\"avatar_file\"></p>\n"
+
+        "<p>",L("Bio"),":<br>\n"
+        "<textarea name=\"bio\" cols=\"40\" rows=\"4\">",xs_dict_get(snac->config, "bio"),"</textarea></p>\n"
+
+        "<p><input type=\"checkbox\" name=\"cw\" id=\"cw\" ",(strcmp(cw, "open") == 0 ? "checked" : ""),">\n"
+        "<label for=\"cw\">",L("Always show sensitive content"),"</label></p>\n"
+
+        "<p>",L("Email address for notifications"),":<br>\n"
+        "<input type=\"text\" name=\"email\" value=\"",email,"\"></p>\n"
+
+        "<p>",L("Telegram notifications (bot key and chat id)"),":<br>\n"
+        "<input type=\"text\" name=\"telegram_bot\" placeholder=\"Bot API key\" value=\"",telegram_bot,"\"> "
+        "<input type=\"text\" name=\"telegram_chat_id\" placeholder=\"Chat id\" value=\"",telegram_chat_id,"\"></p>\n"
+
+        "<p>",L("Maximum days to keep posts (0: server settings)"),":<br>\n"
+        "<input type=\"number\" name=\"purge_days\" value=\"",purge_days,"\"></p>\n"
+
+        "<p><input type=\"checkbox\" name=\"drop_dm_from_unknown\" id=\"drop_dm_from_unknown\" ",
+                    (xs_type(d_dm_f_u) == XSTYPE_TRUE ? "checked" : ""),">\n"
+        "<label for=\"drop_dm_from_unknown\">",L("Drop direct messages from people you don't follow"),"</label></p>\n"
+
+        "<p><input type=\"checkbox\" name=\"bot\" id=\"bot\" ",xs_type(bot) == XSTYPE_TRUE ? "checked" : "",">\n"
+        "<label for=\"bot\">",L("This account is a bot"),"</label></p>\n"
+
+        "<p>",L("Password (only to change it)"),":<br>\n"
+        "<input type=\"password\" name=\"passwd1\" value=\"\"></p>\n"
+
+        "<p>",L("Repeat Password"),":<br>\n"
+        "<input type=\"password\" name=\"passwd2\" value=\"\"></p>\n"
+
+        "<input type=\"submit\" class=\"button\" value=\"",L("Update user info"),"\">\n"
+        "</form>\n"
+
+        "</div>\n"
+        "</details>\n"
+        "</details>\n"
+        "</div>\n"
+        "</div>\n",
+        NULL
     );
-
-    s = xs_str_cat(s, s1);
-
-    return s;
 }
 
 
 d_char *html_button(d_char *s, char *clss, char *label)
 {
-    xs *s1 = xs_fmt(
+    return xs_cat(
+               s,
                "<input type=\"submit\" name=\"action\" "
-               "class=\"snac-btn-%s\" value=\"%s\">\n",
-                clss, label);
-
-    return xs_str_cat(s, s1);
+               "class=\"snac-btn-",clss,"\" value=\"",label,"\">\n",
+               NULL
+                 );
 }
 
 
@@ -1236,17 +1184,16 @@ xs_str *html_entry(snac *snac, xs_str *os, const xs_dict *msg, int local,
 
 xs_str *html_user_footer(xs_str *s)
 {
-    xs *s1 = xs_fmt(
+    return xs_cat(
+        s,
         "<div class=\"snac-footer\">\n"
-        "<a href=\"%s\">%s</a> - "
-        "powered by <a href=\"%s\">"
-        "<abbr title=\"Social Networks Are Crap\">snac</abbr></a></div>\n",
-        srv_baseurl,
-        L("about this site"),
-        WHAT_IS_SNAC_URL
+        "  <a href=\"",srv_baseurl,"\">",L("about this site"),"</a> - "
+          "powered by <a href=\"" WHAT_IS_SNAC_URL "\">"
+            "<abbr title=\"Social Networks Are Crap\">snac</abbr>"
+          "</a>\n"
+        "</div>\n",
+        NULL
     );
-
-    return xs_str_cat(s, s1);
 }
 
 
