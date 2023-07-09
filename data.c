@@ -58,6 +58,9 @@ int srv_open(char *basedir, int auto_upgrade)
         if (srv_config == NULL)
             error = xs_fmt("ERROR: cannot parse '%s'", cfg_file);
         else {
+            srv_scheme = xs_dict_get(srv_config, "scheme");
+            if (srv_scheme == NULL)
+                srv_scheme = "https";
             srv_hostname = xs_dict_get(srv_config, "host");
             srv_prefix   = xs_dict_get(srv_config, "prefix");
 
@@ -66,7 +69,7 @@ int srv_open(char *basedir, int auto_upgrade)
             if (srv_hostname == NULL || srv_prefix == NULL)
                 error = xs_str_new("ERROR: cannot get server data");
             else {
-                srv_baseurl = xs_fmt("https://%s%s", srv_hostname, srv_prefix);
+                srv_baseurl = xs_fmt("%s://%s%s", srv_scheme, srv_hostname, srv_prefix);
 
                 dbglevel = (int) xs_number_get(dbglvl);
 
@@ -127,6 +130,7 @@ void srv_free(void)
 {
     xs_free(srv_basedir);
     xs_free(srv_config);
+    //xs_free(srv_scheme); // cannot be freed
     //xs_free(srv_hostname); // cannot be freed?
     //xs_free(srv_prefix); // cannot be freed?
     xs_free(srv_baseurl);

@@ -14,6 +14,7 @@
 #include <stdlib.h>
 
 const char *default_srv_config = "{"
+    "\"scheme\":               \"https\","
     "\"host\":                 \"\","
     "\"prefix\":               \"\","
     "\"address\":              \"127.0.0.1\","
