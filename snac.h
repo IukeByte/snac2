@@ -14,9 +14,10 @@
 extern double disk_layout;
 extern xs_str *srv_basedir;
 extern xs_dict *srv_config;
+extern xs_str *srv_scheme;   /* "https" or maybe "http" */
 extern xs_str *srv_hostname; /* host name, e. g. "need-to-know.com" */
 extern xs_str *srv_prefix;   /* snac prefix, e. g. "/social" */
-extern xs_str *srv_baseurl;  /* "https://[srv_hostname][srv_prefix]" */
+extern xs_str *srv_baseurl;  /* "[srv_scheme]://[srv_hostname][srv_prefix]" */
 
 extern int dbglevel;
 

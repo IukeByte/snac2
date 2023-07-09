@@ -154,7 +154,7 @@ char *login_page(char* redmsg, char* path, const char* ruri, const char* cid, co
     "<!DOCTYPE html>\n"
     "<body><h1>",srv_hostname, " OAuth identify</h1>\n"
     "<div style=\"background-color: red; color: white\">",redmsg,"</div>\n"
-    "<form method=\"post\" action=\"https://",srv_hostname,srv_prefix,path,"\">\n"
+    "<form method=\"post\" action=\"",srv_scheme,"://",srv_hostname,srv_prefix,path,"\">\n"
     "<p>Login: <input type=\"text\" name=\"login\"></p>\n"
     "<p>Password: <input type=\"password\" name=\"passwd\"></p>\n"
     "<input type=\"hidden\" name=\"redir\" value=\"",ruri,"\">\n"
