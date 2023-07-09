@@ -9,6 +9,7 @@
 #include "xs_regex.h"
 #include "xs_time.h"
 #include "xs_set.h"
+#include "xs_url.h"
 
 #include "snac.h"
 
@@ -957,7 +958,7 @@ xs_dict *msg_follow(snac *snac, const char *q)
 
     xs *url_or_uid = xs_strip_i(xs_str_new(q));
 
-    if (xs_startswith(url_or_uid, "https:/"))
+    if (xs_is_http_https(url_or_uid, NULL))
         actor = xs_dup(url_or_uid);
     else
     if (!valid_status(webfinger_request(url_or_uid, &actor, NULL)) || actor == NULL) {
