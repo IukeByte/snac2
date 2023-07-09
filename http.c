@@ -7,6 +7,7 @@
 #include "xs_curl.h"
 #include "xs_time.h"
 #include "xs_json.h"
+#include "xs_url.h"
 
 #include "snac.h"
 
@@ -31,9 +32,11 @@ xs_dict *http_signed_request_raw(const char *keyid, const char *seckey,
 
     date = xs_str_utctime(0, "%a, %d %b %Y %H:%M:%S GMT");
 
-    {
-        xs *s = xs_replace_n(url, "https:/" "/", "", 1);
-        l1 = xs_split_n(s, "/", 1);
+    const char* rest_of_url;
+    if (xs_is_http_https(url, &rest_of_url)) {
+        l1 = xs_split_n(rest_of_url, "/", 1);
+    } else {
+        l1 = xs_dup(url);
     }
 
     /* strip the url to get host and target */

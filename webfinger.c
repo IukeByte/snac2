@@ -4,6 +4,7 @@
 #include "xs.h"
 #include "xs_json.h"
 #include "xs_curl.h"
+#include "xs_url.h"
 
 #include "snac.h"
 
@@ -18,11 +19,11 @@ int webfinger_request_signed(snac *snac, const char *qs, char **actor, char **us
     d_char *host = NULL;
     xs *resource = NULL;
 
-    if (xs_startswith(qs, "https:/" "/")) {
+    const char* rest_of_url = NULL;
+    if (xs_is_http_https(qs, &rest_of_url)) {
         /* actor query: pick the host */
-        xs *s = xs_replace_n(qs, "https:/" "/", "", 1);
 
-        l = xs_split_n(s, "/", 1);
+        l = xs_split_n(rest_of_url, "/", 1);
 
         host     = xs_list_get(l, 0);
         resource = xs_dup(qs);
@@ -126,7 +127,7 @@ int webfinger_get_handler(const xs_dict *req, const char *q_path,
     snac snac;
     int found = 0;
 
-    if (xs_startswith(resource, "https:/" "/")) {
+    if (xs_is_http_https(resource, NULL)) {
         /* actor search: find a user with this actor */
         xs *list = user_list();
         xs_list *p;
@@ -135,7 +136,7 @@ int webfinger_get_handler(const xs_dict *req, const char *q_path,
         p = list;
         while (xs_list_iter(&p, &uid)) {
             if (user_open(&snac, uid)) {
-                if (strcmp(snac.actor, resource) == 0) {
+                if (xs_compare_url(snac.actor, resource)) {
                     found = 1;
                     break;
                 }
