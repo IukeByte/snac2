@@ -148,19 +148,22 @@ int token_del(const char *id)
 }
 
 
-const char *login_page = ""
-"<!DOCTYPE html>\n"
-"<body><h1>%s OAuth identify</h1>\n"
-"<div style=\"background-color: red; color: white\">%s</div>\n"
-"<form method=\"post\" action=\"https:/" "/%s/%s\">\n"
-"<p>Login: <input type=\"text\" name=\"login\"></p>\n"
-"<p>Password: <input type=\"password\" name=\"passwd\"></p>\n"
-"<input type=\"hidden\" name=\"redir\" value=\"%s\">\n"
-"<input type=\"hidden\" name=\"cid\" value=\"%s\">\n"
-"<input type=\"hidden\" name=\"state\" value=\"%s\">\n"
-"<input type=\"submit\" value=\"OK\">\n"
-"</form><p>%s</p></body>\n"
-"";
+char *login_page(char* redmsg, char* path, const char* ruri, const char* cid, const char* state)
+{
+    return xs_cat(
+    "<!DOCTYPE html>\n"
+    "<body><h1>",srv_hostname, " OAuth identify</h1>\n"
+    "<div style=\"background-color: red; color: white\">",redmsg,"</div>\n"
+    "<form method=\"post\" action=\"https://",srv_hostname,srv_prefix,path,"\">\n"
+    "<p>Login: <input type=\"text\" name=\"login\"></p>\n"
+    "<p>Password: <input type=\"password\" name=\"passwd\"></p>\n"
+    "<input type=\"hidden\" name=\"redir\" value=\"",ruri,"\">\n"
+    "<input type=\"hidden\" name=\"cid\" value=\"",cid,"\">\n"
+    "<input type=\"hidden\" name=\"state\" value=\"",state,"\">\n"
+    "<input type=\"submit\" value=\"OK\">\n"
+    "</form><p>" USER_AGENT "</p></body>\n",
+    NULL);
+}
 
 int oauth_get_handler(const xs_dict *req, const char *q_path,
                       char **body, int *b_size, char **ctype)
@@ -193,13 +196,11 @@ int oauth_get_handler(const xs_dict *req, const char *q_path,
             xs *app = app_get(cid);
 
             if (app != NULL) {
-                const char *host = xs_dict_get(srv_config, "host");
 
                 if (xs_is_null(state))
                     state = "";
 
-                *body  = xs_fmt(login_page, host, "", host, "oauth/x-snac-login",
-                                ruri, cid, state, USER_AGENT);
+                *body  = login_page("", "/oauth/x-snac-login", ruri, cid, state);
                 *ctype = "text/html";
                 status = 200;
 
@@ -213,10 +214,8 @@ int oauth_get_handler(const xs_dict *req, const char *q_path,
     }
     else
     if (strcmp(cmd, "/x-snac-get-token") == 0) { /** **/
-        const char *host = xs_dict_get(srv_config, "host");
 
-        *body  = xs_fmt(login_page, host, "", host, "oauth/x-snac-get-token",
-                        "", "", "", USER_AGENT);
+        *body  = login_page("", "/oauth/x-snac-get-token", "", "", "");
         *ctype = "text/html";
         status = 200;
 
@@ -262,11 +261,9 @@ int oauth_post_handler(const xs_dict *req, const char *q_path,
         const char *cid    = xs_dict_get(args, "cid");
         const char *state  = xs_dict_get(args, "state");
 
-        const char *host = xs_dict_get(srv_config, "host");
-
         /* by default, generate another login form with an error */
-        *body  = xs_fmt(login_page, host, "LOGIN INCORRECT", host, "oauth/x-snac-login",
-                        redir, cid, state, USER_AGENT);
+        *body  = login_page("LOGIN INCORRECT", "/oauth/x-snac-login",
+                        redir, cid, state);
         *ctype = "text/html";
         status = 200;
 
@@ -431,11 +428,8 @@ int oauth_post_handler(const xs_dict *req, const char *q_path,
         const char *login  = xs_dict_get(args, "login");
         const char *passwd = xs_dict_get(args, "passwd");
 
-        const char *host = xs_dict_get(srv_config, "host");
-
         /* by default, generate another login form with an error */
-        *body  = xs_fmt(login_page, host, "LOGIN INCORRECT", host, "oauth/x-snac-get-token",
-                        "", "", "", USER_AGENT);
+        *body  = login_page("LOGIN INCORRECT", "/oauth/x-snac-get-token", "", "", "");
         *ctype = "text/html";
         status = 200;
 
@@ -1446,16 +1440,15 @@ int mastoapi_get_handler(const xs_dict *req, const char *q_path,
     if (strcmp(cmd, "/v1/instance") == 0) { /** **/
         /* returns an instance object */
         xs *ins = xs_dict_new();
-        const char *host = xs_dict_get(srv_config, "host");
 
-        ins = xs_dict_append(ins, "uri",         host);
-        ins = xs_dict_append(ins, "domain",      host);
-        ins = xs_dict_append(ins, "title",       host);
+        ins = xs_dict_append(ins, "uri",         srv_hostname);
+        ins = xs_dict_append(ins, "domain",      srv_hostname);
+        ins = xs_dict_append(ins, "title",       srv_hostname);
         ins = xs_dict_append(ins, "version",     "4.0.0 (not true; really " USER_AGENT ")");
         ins = xs_dict_append(ins, "source_url",  WHAT_IS_SNAC_URL);
-        ins = xs_dict_append(ins, "description", host);
+        ins = xs_dict_append(ins, "description", srv_hostname);
 
-        ins = xs_dict_append(ins, "short_description", host);
+        ins = xs_dict_append(ins, "short_description", srv_hostname);
 
         xs *susie = xs_fmt("%s/susie.png", srv_baseurl);
         ins = xs_dict_append(ins, "thumbnail", susie);

@@ -14,7 +14,9 @@
 extern double disk_layout;
 extern xs_str *srv_basedir;
 extern xs_dict *srv_config;
-extern xs_str *srv_baseurl;
+extern xs_str *srv_hostname; /* host name, e. g. "need-to-know.com" */
+extern xs_str *srv_prefix;   /* snac prefix, e. g. "/social" */
+extern xs_str *srv_baseurl;  /* "https://[srv_hostname][srv_prefix]" */
 
 extern int dbglevel;
 
@@ -33,7 +35,7 @@ int srv_open(char *basedir, int auto_upgrade);
 void srv_free(void);
 
 typedef struct _snac {
-    xs_str *uid;        /* uid */
+    xs_str *uid;        /* uid, without special chars, without hostname/prefix, etc */
     xs_str *basedir;    /* user base directory */
     xs_dict *config;    /* user configuration */
     xs_dict *config_o;  /* user configuration admin override */

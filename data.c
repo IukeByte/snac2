@@ -58,18 +58,15 @@ int srv_open(char *basedir, int auto_upgrade)
         if (srv_config == NULL)
             error = xs_fmt("ERROR: cannot parse '%s'", cfg_file);
         else {
-            char *host;
-            char *prefix;
-            char *dbglvl;
+            srv_hostname = xs_dict_get(srv_config, "host");
+            srv_prefix   = xs_dict_get(srv_config, "prefix");
 
-            host   = xs_dict_get(srv_config, "host");
-            prefix = xs_dict_get(srv_config, "prefix");
-            dbglvl = xs_dict_get(srv_config, "dbglevel");
+            char* dbglvl = xs_dict_get(srv_config, "dbglevel");
 
-            if (host == NULL || prefix == NULL)
+            if (srv_hostname == NULL || srv_prefix == NULL)
                 error = xs_str_new("ERROR: cannot get server data");
             else {
-                srv_baseurl = xs_fmt("https://%s%s", host, prefix);
+                srv_baseurl = xs_fmt("https://%s%s", srv_hostname, srv_prefix);
 
                 dbglevel = (int) xs_number_get(dbglvl);
 
@@ -130,6 +127,8 @@ void srv_free(void)
 {
     xs_free(srv_basedir);
     xs_free(srv_config);
+    //xs_free(srv_hostname); // cannot be freed?
+    //xs_free(srv_prefix); // cannot be freed?
     xs_free(srv_baseurl);
 
     pthread_mutex_destroy(&data_mutex);
