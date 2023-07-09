@@ -1,2 +1,6 @@
 *.o
 snac
+
+*.swp
+*.orig
+.gdb_history
