@@ -1,5 +1,6 @@
 *.o
 snac
+obj/
 
 *.swp
 *.orig

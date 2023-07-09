@@ -2,16 +2,20 @@ PREFIX=/usr/local
 PREFIX_MAN=$(PREFIX)/man
 CFLAGS?=-g -Wall -Wextra
 
-all: snac
+all: snac test
+
+libs=-lcurl -lcrypto -pthread
+
+-include inc/test.mk
 
 snac: snac.o main.o data.o http.o httpd.o webfinger.o \
     activitypub.o html.o utils.o format.o upgrade.o mastoapi.o
-	$(CC) $(CFLAGS) -L/usr/local/lib *.o -lcurl -lcrypto -pthread $(LDFLAGS) -o $@
+	$(CC) $(CFLAGS) -L/usr/local/lib *.o $(libs) $(LDFLAGS) -o $@
 
 .c.o:
 	$(CC) $(CFLAGS) $(CPPFLAGS) -I/usr/local/include -c $<
 
-clean:
+clean: test-clean
 	rm -rf *.o *.core snac makefile.depend
 
 dep:

@@ -4,8 +4,11 @@
 
 #define _XS_URL_H
 
-#include <stdbool.h>
+#ifndef _XS_H
+#error You must include xs.h first.
+#endif
 
+#include <stdbool.h>
 
 bool xs_is_http_https(const xs_val *testee, const char **restOfUrl);
 
