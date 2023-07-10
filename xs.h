@@ -69,7 +69,8 @@ xs_str *xs_replace_in(xs_str *str, const char *sfrom, const char *sto, int times
 #define xs_replace_i(str, sfrom, sto) xs_replace_in(str, sfrom, sto, XS_ALL)
 #define xs_replace(str, sfrom, sto) xs_replace_in(xs_dup(str), sfrom, sto, XS_ALL)
 #define xs_replace_n(str, sfrom, sto, times) xs_replace_in(xs_dup(str), sfrom, sto, times)
-xs_str *xs_cat(xs_str* first, ...); // last argument MUST be NULL
+xs_str *xs_cat_expecting_NULL(xs_str* first, ...); // last argument must be NULL
+#define xs_cat(first, ...) xs_cat_expecting_NULL(first, __VA_ARGS__, NULL)
 xs_str *xs_fmt(const char *fmt, ...);
 int xs_str_in(const char *haystack, const char *needle);
 int _xs_startsorends(const char *str, const char *xfix, int ends);
@@ -462,7 +463,7 @@ xs_str *xs_replace_in(xs_str *str, const char *sfrom, const char *sto, int times
 }
 
 
-xs_str *xs_cat(xs_str* first, ...) // last argument must be NULL!
+xs_str *xs_cat_expecting_NULL(xs_str* first, ...) // last argument is NULL
 {
     va_list ap;
     xs_str *result = NULL;
