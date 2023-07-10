@@ -97,7 +97,7 @@ xs_str *html_actor_icon(xs_str *os, char *actor,
 
     xs *s_url;
     if (!xs_is_null(url))
-        s_url = xs_cat(" <a href=\"",url,"\">»</a>", NULL);
+        s_url = xs_cat(" <a href=\"",url,"\">»</a>");
     else
         s_url = xs_str_new("");
 
@@ -124,8 +124,7 @@ xs_str *html_actor_icon(xs_str *os, char *actor,
         }
 
         s_date = xs_cat(
-            "\n<time class=\"dt-published snac-pubdate\" title=\"",date_title,"\">",date_label,"</time>\n",
-            NULL);
+            "\n<time class=\"dt-published snac-pubdate\" title=\"",date_title,"\">",date_label,"</time>\n");
     }
 
     xs *user;
@@ -156,8 +155,7 @@ xs_str *html_actor_icon(xs_str *os, char *actor,
         "<a href=\"",xs_dict_get(actor, "id"),"\" class=\"p-author h-card snac-author\">",name,"</a>",
         url,
         s_priv, s_bot, s_date,"<br>"
-        "<a href=\"",xs_dict_get(actor, "id"),"\" class=\"p-author-tag h-card snac-author-tag\">",user,"</a>",
-        NULL);
+        "<a href=\"",xs_dict_get(actor, "id"),"\" class=\"p-author-tag h-card snac-author-tag\">",user,"</a>");
 }
 
 
@@ -501,8 +499,7 @@ d_char *html_top_controls(snac *snac, d_char *s)
         "</details>\n"
         "</details>\n"
         "</div>\n"
-        "</div>\n",
-        NULL
+        "</div>\n"
     );
 }
 
@@ -512,8 +509,7 @@ d_char *html_button(d_char *s, char *clss, char *label)
     return xs_cat(
                s,
                "<input type=\"submit\" name=\"action\" "
-               "class=\"snac-btn-",clss,"\" value=\"",label,"\">\n",
-               NULL
+               "class=\"snac-btn-",clss,"\" value=\"",label,"\">\n"
                  );
 }
 
@@ -1179,8 +1175,7 @@ xs_str *html_user_footer(xs_str *s)
           "powered by <a href=\"" WHAT_IS_SNAC_URL "\">"
             "<abbr title=\"Social Networks Are Crap\">snac</abbr>"
           "</a>\n"
-        "</div>\n",
-        NULL
+        "</div>\n"
     );
 }
 

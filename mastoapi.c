@@ -161,8 +161,7 @@ char *login_page(char* redmsg, char* path, const char* ruri, const char* cid, co
     "<input type=\"hidden\" name=\"cid\" value=\"",cid,"\">\n"
     "<input type=\"hidden\" name=\"state\" value=\"",state,"\">\n"
     "<input type=\"submit\" value=\"OK\">\n"
-    "</form><p>" USER_AGENT "</p></body>\n",
-    NULL);
+    "</form><p>" USER_AGENT "</p></body>\n");
 }
 
 int oauth_get_handler(const xs_dict *req, const char *q_path,
