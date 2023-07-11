@@ -13,24 +13,6 @@
 #include <sys/stat.h>
 #include <stdlib.h>
 
-const char *default_srv_config = "{"
-    "\"scheme\":               \"https\", # scheme to link in html and json replies"
-    "\"scheme_webfinger\":     \"https\", # scheme to use in webfinger requests - this must be https (RFC 7033)"
-    "\"host\":                 \"\","
-    "\"prefix\":               \"\","
-    "\"address\":              \"127.0.0.1\","
-    "\"port\":                 8001,   # this will always be http, please close port in firewall"
-    "\"layout\":               0.0,"
-    "\"dbglevel\":             0,"
-    "\"queue_retry_minutes\":  2,"
-    "\"queue_retry_max\":      10,"
-    "\"cssurls\":              [\"\"],"
-    "\"max_timeline_entries\": 128,"
-    "\"timeline_purge_days\":  120,"
-    "\"local_purge_days\":     0,"
-    "\"admin_email\":          \"\","
-    "\"admin_account\":        \"\""
-    "}";
 
 const char *default_css =
     "body { max-width: 48em; margin: auto; line-height: 1.5; padding: 0.8em }\n"
@@ -82,13 +64,43 @@ const char *greeting_html =
     "<p>This site is powered by <abbr title=\"Social Networks Are Crap\">snac</abbr>.</p>\n"
     "</body></html>\n";
 
+
+void prompt(const char *what, const char *default_value, xs_str* *result)
+{
+    if (*result)
+    {
+        xs_free(*result);
+        *result = NULL;
+    }
+    printf(what);
+    if (default_value)
+        printf(" [%s]: ", default_value);
+    else
+        printf(": ");
+
+    *result = xs_strip_i(xs_readline(stdin));
+    if (*result[0] == '\0')
+        *result = xs_str_new(default_value);
+}
+xs_str* grow_settingsC(xs_str* s, const char* name, xs_str* value, const char* comment, ... /*nothing, only for technical reasons*/)
+{
+    static const char* white = "                    ";
+    unsigned int len = strlen(name); // -> using the last n blanks ' ' from white string.
+    if (len > strlen(white)) len = strlen(white);
+    return xs_str_cat(s, xs_cat("    \"", name, "\": ",&white[len],"\"", value, "\"", (comment? "  # ": ""), (comment? comment : ""), "\n"));
+}
+#define grow_settings(s, name, ...) grow_settingsC(s, name, __VA_ARGS__, NULL)
+
+
 int snac_init(const char *basedir)
 {
     FILE *f;
 
+    xs *in = NULL;
+
     if (basedir == NULL) {
-        printf("Base directory:\n");
-        srv_basedir = xs_strip_i(xs_readline(stdin));
+        prompt("Base directory", NULL, &in);
+        srv_basedir = xs_dup(in);
     }
     else
         srv_basedir = xs_str_new(basedir);
@@ -104,54 +116,45 @@ int snac_init(const char *basedir)
         return 1;
     }
 
-    srv_config = xs_json_loadsC(default_srv_config, true);
+    xs* cfg = xs_str_new("{\n");
 
-    xs *layout = xs_number_new(disk_layout);
-    srv_config = xs_dict_set(srv_config, "layout", layout);
+    prompt("Scheme", "https", &in);
+    cfg = grow_settings(cfg, "scheme", in, "scheme to link in html and json replies");
+    cfg = grow_settings(cfg, "scheme_webfinger", "https", "scheme to use in webfinger requests - this must be https (RFC 7033)");
 
-    printf("Network address [%s]:\n", xs_dict_get(srv_config, "address"));
-    {
-        xs *i = xs_strip_i(xs_readline(stdin));
-        if (*i)
-            srv_config = xs_dict_set(srv_config, "address", i);
-    }
+    prompt("Hostname", NULL, &in);
+    if (!in || *in == '\0') return 1;
+    cfg = grow_settings(cfg, "host", in);
 
-    printf("Network port [%d]:\n", (int)xs_number_get(xs_dict_get(srv_config, "port")));
-    {
-        xs *i = xs_strip_i(xs_readline(stdin));
-        if (*i) {
-            xs *n = xs_number_new(atoi(i));
-            srv_config = xs_dict_set(srv_config, "port", n);
-        }
-    }
+    prompt("URL Prefix", "", &in);
+    int last = strlen(in);
+    if (last > 0 && in[last-1] == '/') in[last-1] = '\0';
+    cfg = grow_settings(cfg, "prefix", in);
 
-    printf("Host name:\n");
-    {
-        xs *i = xs_strip_i(xs_readline(stdin));
-        if (*i == '\0')
-            return 1;
+    prompt("Listen on address", "127.0.0.1", &in);
+    if (!in || *in == '\0') return 1;
+    cfg = grow_settings(cfg, "address", in);
+    prompt("Listen on port", "8001", &in);
+    cfg = grow_settings(cfg, "port", in, "always http, not https");
 
-        srv_config = xs_dict_set(srv_config, "host", i);
-    }
+    char s_layout[5];
+    snprintf(s_layout, sizeof(s_layout), "%.1f", disk_layout);
+    cfg = grow_settings(cfg, "layout", s_layout);
+    cfg = grow_settings(cfg, "dbglevel", "0");
+    cfg = grow_settings(cfg, "queue_retry_minutes", "2");
+    cfg = grow_settings(cfg, "queue_retry_max", "10");
+    cfg = xs_str_cat(cfg, "    \"cssurls\":              [\"\"],\n");
+    cfg = grow_settings(cfg, "max_timeline_entries", "128");
+    cfg = grow_settings(cfg, "timeline_purge_days", "120");
+    cfg = grow_settings(cfg, "local_purge_days", "0");
 
-    printf("URL prefix:\n");
-    {
-        xs *i = xs_strip_i(xs_readline(stdin));
+    prompt("Admin email address (optional)", NULL, &in);
+    if (in && in[0] != '\0')
+        cfg = grow_settings(cfg, "admin_email", in);
 
-        if (*i) {
-            if (xs_endswith(i, "/"))
-                i = xs_crop_i(i, 0, -1);
+    cfg = grow_settings(cfg, "admin_account", "");
+    cfg = xs_str_cat(cfg, "}\n");
 
-            srv_config = xs_dict_set(srv_config, "prefix", i);
-        }
-    }
-
-    printf("Admin email address (optional):\n");
-    {
-        xs *i = xs_strip_i(xs_readline(stdin));
-
-        srv_config = xs_dict_set(srv_config, "admin_email", i);
-    }
 
     if (mkdirx(srv_basedir) == -1) {
         printf("ERROR: cannot create directory '%s'\n", srv_basedir);
@@ -194,8 +197,7 @@ int snac_init(const char *basedir)
         return 1;
     }
 
-    xs *j = xs_json_dumps_pp(srv_config, 4);
-    fwrite(j, strlen(j), 1, f);
+    fwrite(cfg, strlen(cfg), 1, f);
     fclose(f);
 
     printf("Done.\n");
