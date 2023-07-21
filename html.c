@@ -301,7 +301,7 @@ d_char *html_user_header(snac *snac, d_char *s, int local)
 
     {
         xs *s1 = xs_fmt("<link rel=\"alternate\" type=\"application/rss+xml\" "
-                        "title=\"RSS\" href=\"%s.rss\" />\n", snac->actor); /* snac->actor is likely need to be URLEncoded. */
+                        "title=\"RSS\" href=\"%s.rss\" />\n", snac->uid); /* snac->actor is likely need to be URLEncoded. */
         s = xs_str_cat(s, s1);
     }
 
@@ -323,10 +323,10 @@ d_char *html_user_header(snac *snac, d_char *s, int local)
 
         if (local)
             s1 = xs_fmt(
-                "<a href=\"%s.rss\">%s</a> - "
-                "<a href=\"%s/admin\" rel=\"nofollow\">%s</a></nav>\n",
-                snac->actor, L("RSS"),
-                snac->actor, L("private"));
+                "<a href=\"../%s.rss\">%s</a> - "
+                "<a href=\"../%s/admin\" rel=\"nofollow\">%s</a></nav>\n",
+                snac->uid, L("RSS"),
+                snac->uid, L("private"));
         else {
             xs *n_list = notify_list(snac, 1);
             int n_len  = xs_list_len(n_list);
@@ -340,14 +340,11 @@ d_char *html_user_header(snac *snac, d_char *s, int local)
                 n_str = xs_str_new("");
 
             s1 = xs_fmt(
-                "<a href=\"%s\">%s</a> - "
-                "<a href=\"%s/admin\">%s</a> - "
-                "<a href=\"%s/notifications\">%s</a>%s - "
-                "<a href=\"%s/people\">%s</a></nav>\n",
-                snac->actor, L("public"),
-                snac->actor, L("private"),
-                snac->actor, L("notifications"), n_str,
-                snac->actor, L("people"));
+                "<a href=\".\">%s</a> - "
+                "<a href=\"admin\">%s</a> - "
+                "<a href=\"notifications\">%s</a>%s - "
+                "<a href=\"people\">%s</a></nav>\n",
+                L("public"), L("private"), L("notifications"), n_str, L("people"));
         }
 
         s = xs_str_cat(s, s1);
@@ -531,7 +528,7 @@ d_char *html_top_controls(snac *snac, d_char *s)
 
     xs *s1 = xs_fmt(_tmpl,
         L("New Post..."),
-        snac->actor,
+        snac->uid,
         L("Sensitive content"),
         L("Sensitive content description"),
         L("Only for mentioned people"),
@@ -552,14 +549,14 @@ d_char *html_top_controls(snac *snac, d_char *s)
 
         L("Preferences..."),
 
-        snac->actor,
+        snac->uid,
         L("Follow"), L("(by URL or user@host)"),
 
-        snac->actor,
+        snac->uid,
         L("Boost"), L("(by URL)"),
 
         L("User Settings"),
-        snac->actor,
+        snac->uid,
         L("Display name"),
         es1,
         L("Avatar"),

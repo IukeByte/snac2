@@ -186,8 +186,8 @@ xs_str *not_really_markdown(const char *content, xs_list **attach)
 
 
 const char *valid_tags[] = {
-    "a", "p", "br", "br/", "blockquote", "ul", "ol", "li", "cite",
-    "span", "i", "b", "u", "pre", "code", "em", "strong", NULL
+    "a", "p", "br", "br/", "blockquote", "ul", "ol", "li", "cite", "small",
+    "span", "i", "b", "u", "pre", "code", "em", "strong", "hr", "img", "del", NULL
 };
 
 xs_str *sanitize(const char *content)
@@ -219,11 +219,12 @@ xs_str *sanitize(const char *content)
 
             if (valid_tags[i]) {
                 /* accepted tag: rebuild it with only the accepted elements */
-                xs *el = xs_regex_match(v, "(href|rel|class|target)=\"[^\"]*\"");
+                xs *el = xs_regex_match(v, "(src|href|rel|class|target)=\"[^\"]*\"");
                 xs *s3 = xs_join(el, " ");
+                xs *e2 = encode_html(s3);
 
                 s2 = xs_fmt("<%s%s%s%s>",
-                    v[1] == '/' ? "/" : "", tag, xs_list_len(el) ? " " : "", s3);
+                    v[1] == '/' ? "/" : "", tag, xs_list_len(el) ? " " : "", e2);
 
                 s = xs_str_cat(s, s2);
             } else {
