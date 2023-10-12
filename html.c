@@ -28,7 +28,7 @@ int login(snac *snac, const xs_dict *headers)
 
         if (xs_list_len(l1) == 2) {
             logged_in = check_password(
-                xs_list_get(l1, 0), xs_list_get(l1, 1),
+                xs_tolower_i(xs_list_get(l1, 0)), xs_list_get(l1, 1),
                 xs_dict_get(snac->config, "passwd"));
         }
     }

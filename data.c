@@ -157,9 +157,9 @@ int user_open(snac *snac, const char *uid)
         xs *cfg_file;
         FILE *f;
 
-        snac->uid = xs_str_new(uid);
+        snac->uid = xs_tolower_i(xs_str_new(uid));
 
-        snac->basedir = xs_fmt("%s/user/%s", srv_basedir, uid);
+        snac->basedir = xs_fmt("%s/user/%s", srv_basedir, snac->uid);
 
         cfg_file = xs_fmt("%s/user.json", snac->basedir);
 

@@ -235,7 +235,7 @@ int adduser(const char *uid)
 
     if (uid == NULL) {
         printf("Username: "); fflush(stdout);
-        uid = xs_strip_i(xs_readline(stdin));
+        uid = xs_tolower_i(xs_strip_i(xs_readline(stdin)));
     }
 
     if (!validate_uid(uid)) {
