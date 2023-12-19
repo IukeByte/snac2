@@ -1407,8 +1407,7 @@ xs_html *html_entry(snac *user, xs_dict *msg, int local,
         snac_content = xs_html_tag("details",
             xs_html_attr(cw, NULL),
             xs_html_tag("summary",
-                xs_html_text(v),
-                xs_html_text(L(" [SENSITIVE CONTENT]"))));
+                xs_html_text(v)));
     }
     else {
         /* print the summary as a header (sites like e.g. Friendica can contain one) */
