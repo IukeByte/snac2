@@ -12,6 +12,7 @@
 
 #include "snac.h"
 
+#include <idna.h>
 #include <time.h>
 #include <sys/stat.h>
 #include <sys/file.h>
@@ -57,6 +58,7 @@ int srv_open(char *basedir, int auto_upgrade)
             error = xs_fmt("ERROR: cannot parse '%s'", cfg_file);
         else {
             char *host;
+            char *host_punycode;
             char *prefix;
             char *dbglvl;
 
@@ -66,6 +68,8 @@ int srv_open(char *basedir, int auto_upgrade)
 
             if (host == NULL || prefix == NULL)
                 error = xs_str_new("ERROR: cannot get server data");
+            else if (xs_str_in(host, ".xn--") != -1 || xs_startswith(host, "xn--"))
+                error = xs_str_new("ERROR: hostname shall be encoded in UTF-8. snac will automatically convert to punycode when necessary");
             else {
                 srv_baseurl = xs_fmt("https://%s%s", host, prefix);
 
@@ -84,6 +88,16 @@ int srv_open(char *basedir, int auto_upgrade)
                     else
                         ret = 1;
                 }
+
+                if (idna_to_ascii_8z(host, &host_punycode, IDNA_ALLOW_UNASSIGNED) == IDNA_SUCCESS)
+                {
+                    xs_dict_set(srv_config, "host_punycode", host_punycode);
+                    srv_log(xs_fmt("Using IDN. UTF-8 / Punycode: %s / %s", host, host_punycode));
+                }
+                else {
+                    xs_dict_set(srv_config, "host_punycode", xs_dup(host));
+                }
+
             }
 
         }

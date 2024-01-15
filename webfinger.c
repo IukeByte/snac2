@@ -1,8 +1,6 @@
 /* snac - A simple, minimalistic ActivityPub instance */
 /* copyright (c) 2022 - 2024 grunfink et al. / MIT license */
 
-#include <idna.h>
-
 #include "xs.h"
 #include "xs_json.h"
 #include "xs_curl.h"
@@ -59,15 +57,10 @@ int webfinger_request_signed(snac *snac, const char *qs, char **actor, char **us
     }
     else
     {
-      char* decoded_host = NULL;
-      if (IDNA_SUCCESS != idna_to_ascii_8z(host, &decoded_host, IDNA_ALLOW_UNASSIGNED)) {
-        /* Do something clever here. For now: just use the oriinal */
-        decoded_host = strdup(host);
-      }
-
-
       /* is it a query about one of us? */
-      if (strcmp(decoded_host, xs_dict_get(srv_config, "host")) == 0) {
+      if ((strcmp(host, xs_dict_get(srv_config, "host")) == 0) ||
+          (strcmp(host, xs_dict_get(srv_config, "host_punycode")) == 0))
+      {
         /* route internally */
           xs *req    = xs_dict_new();
           xs *q_vars = xs_dict_new();
@@ -87,7 +80,6 @@ int webfinger_request_signed(snac *snac, const char *qs, char **actor, char **us
           else
               http_signed_request(snac, "GET", url, headers, NULL, 0, &status, &payload, &p_size, 0);
       }
-      free(decoded_host);
     }
 
     if (obj == NULL && valid_status(status) && payload) {
@@ -176,18 +168,11 @@ int webfinger_get_handler(xs_dict *req, char *q_path,
             char *uid  = xs_list_get(l, 0);
             char *host = xs_list_get(l, 1);
 
-            char* decoded_host = NULL;
-            if (IDNA_SUCCESS != idna_to_ascii_8z(xs_dict_get(srv_config, "host"), &decoded_host, IDNA_ALLOW_UNASSIGNED)) {
-              /* Do something clever here. For now: just use the oriinal */
-              decoded_host = strdup(xs_dict_get(srv_config, "host"));
-            }
+            /* Other servers will Web-Finger us either by the UTF-8 name or the Punycode name*/
+            if ((strcmp(host, xs_dict_get(srv_config, "host")) == 0) ||
+                (strcmp(host, xs_dict_get(srv_config, "host_punycode")) == 0))
 
-            srv_log(xs_fmt("decoded/original/srv_config: %s / %s / %s", decoded_host, host, xs_dict_get(srv_config, "host")));
-
-
-            if (strcmp(host, decoded_host) == 0 || strcmp(host, xs_dict_get(srv_config, "host")) == 0)
                 found = user_open(&snac, uid);
-            free(decoded_host);
         }
     }
 
