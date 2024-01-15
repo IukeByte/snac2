@@ -1,6 +1,8 @@
 /* snac - A simple, minimalistic ActivityPub instance */
 /* copyright (c) 2022 - 2024 grunfink et al. / MIT license */
 
+#include <idna.h>
+
 #include "xs.h"
 #include "xs_json.h"
 #include "xs_curl.h"
@@ -50,31 +52,42 @@ int webfinger_request_signed(snac *snac, const char *qs, char **actor, char **us
 
     xs *cached_qs = xs_fmt("webfinger:%s", qs);
 
+
     /* is it cached? */
     if (valid_status(status = object_get(cached_qs, &obj))) {
         /* nothing more to do */
     }
     else
-    /* is it a query about one of us? */
-    if (strcmp(host, xs_dict_get(srv_config, "host")) == 0) {
+    {
+      char* decoded_host = NULL;
+      if (IDNA_SUCCESS != idna_to_ascii_8z(host, &decoded_host, IDNA_ALLOW_UNASSIGNED)) {
+        /* Do something clever here. For now: just use the oriinal */
+        decoded_host = strdup(host);
+      }
+
+
+      /* is it a query about one of us? */
+      if (strcmp(decoded_host, xs_dict_get(srv_config, "host")) == 0) {
         /* route internally */
-        xs *req    = xs_dict_new();
-        xs *q_vars = xs_dict_new();
-        char *ctype;
+          xs *req    = xs_dict_new();
+          xs *q_vars = xs_dict_new();
+          char *ctype;
 
-        q_vars = xs_dict_append(q_vars, "resource", resource);
-        req    = xs_dict_append(req, "q_vars", q_vars);
+          q_vars = xs_dict_append(q_vars, "resource", resource);
+          req    = xs_dict_append(req, "q_vars", q_vars);
 
-        status = webfinger_get_handler(req, "/.well-known/webfinger",
-                                       &payload, &p_size, &ctype);
-    }
-    else {
-        xs *url = xs_fmt("https:/" "/%s/.well-known/webfinger?resource=%s", host, resource);
+          status = webfinger_get_handler(req, "/.well-known/webfinger",
+                                         &payload, &p_size, &ctype);
+      }
+      else {
+          xs *url = xs_fmt("https:/" "/%s/.well-known/webfinger?resource=%s", host, resource);
 
-        if (snac == NULL)
-            xs_http_request("GET", url, headers, NULL, 0, &status, &payload, &p_size, 0);
-        else
-            http_signed_request(snac, "GET", url, headers, NULL, 0, &status, &payload, &p_size, 0);
+          if (snac == NULL)
+              xs_http_request("GET", url, headers, NULL, 0, &status, &payload, &p_size, 0);
+          else
+              http_signed_request(snac, "GET", url, headers, NULL, 0, &status, &payload, &p_size, 0);
+      }
+      free(decoded_host);
     }
 
     if (obj == NULL && valid_status(status) && payload) {
@@ -163,8 +176,18 @@ int webfinger_get_handler(xs_dict *req, char *q_path,
             char *uid  = xs_list_get(l, 0);
             char *host = xs_list_get(l, 1);
 
-            if (strcmp(host, xs_dict_get(srv_config, "host")) == 0)
+            char* decoded_host = NULL;
+            if (IDNA_SUCCESS != idna_to_ascii_8z(xs_dict_get(srv_config, "host"), &decoded_host, IDNA_ALLOW_UNASSIGNED)) {
+              /* Do something clever here. For now: just use the oriinal */
+              decoded_host = strdup(xs_dict_get(srv_config, "host"));
+            }
+
+            srv_log(xs_fmt("decoded/original/srv_config: %s / %s / %s", decoded_host, host, xs_dict_get(srv_config, "host")));
+
+
+            if (strcmp(host, decoded_host) == 0 || strcmp(host, xs_dict_get(srv_config, "host")) == 0)
                 found = user_open(&snac, uid);
+            free(decoded_host);
         }
     }
 
