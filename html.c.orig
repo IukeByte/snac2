@@ -765,7 +765,7 @@ static xs_html *html_user_body(snac *user, int local)
             while (xs_dict_iter(&metadata, &k, &v)) {
                 xs_html *value;
 
-                if (xs_startswith(v, "http"))
+                if (xs_startswith(v, "https:/" "/"))
                     value = xs_html_tag("a",
                         xs_html_attr("href", v),
                         xs_html_text(v));
