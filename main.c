@@ -78,7 +78,7 @@ int main(int argc, char *argv[])
     snac snac;
 
     /* ensure group has write access */
-    umask(0007);
+    umask(0070);
 
     if ((cmd = GET_ARGV()) == NULL)
         return usage();
