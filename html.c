@@ -274,7 +274,8 @@ xs_html *html_note(snac *user, char *summary,
                    char *edit_id, char *actor_id,
                    xs_val *cw_yn, char *cw_text,
                    xs_val *mnt_only, char *redir,
-                   char *in_reply_to, int poll)
+                   char *in_reply_to, char *quoting,
+                   int poll)
 {
     xs *action = xs_fmt("%s/admin/note", user->actor);
 
@@ -352,7 +353,22 @@ xs_html *html_note(snac *user, char *summary,
                 xs_html_attr("type",     "text"),
                 xs_html_attr("name",     "in_reply_to"),
                 xs_html_attr("placeholder", "Optional URL to reply to")));
-
+    
+    if (quoting)
+        xs_html_add(form,
+            xs_html_sctag("input",
+                xs_html_attr("type",  "hidden"),
+                xs_html_attr("name",  "quoting"),
+                xs_html_attr("value", quoting)));
+    else
+        xs_html_add(form,
+            xs_html_tag("p", NULL),
+            xs_html_text(L("Quote (URL): ")),
+            xs_html_sctag("input",
+                xs_html_attr("type",     "text"),
+                xs_html_attr("name",     "quoting"),
+                xs_html_attr("placeholder", "Optional URL to quote")));
+    
     if (edit_id)
         xs_html_add(form,
             xs_html_sctag("input",
@@ -854,7 +870,7 @@ xs_html *html_top_controls(snac *snac)
             NULL, NULL,
             xs_stock_false, "",
             xs_stock_false, NULL,
-            NULL, 1),
+            NULL, NULL, 1),
 
         /** operations **/
         xs_html_tag("details",
@@ -1285,7 +1301,7 @@ xs_html *html_entry_controls(snac *snac, char *actor, const xs_dict *msg, const 
                 id, NULL,
                 xs_dict_get(msg, "sensitive"), xs_dict_get(msg, "summary"),
                 xs_stock_false, redir,
-                NULL, 0)),
+                xs_dict_get(msg, "in_reply_to"), xs_dict_get(msg, "quoting"), 0)),
             xs_html_tag("p", NULL));
     }
 
@@ -1304,7 +1320,26 @@ xs_html *html_entry_controls(snac *snac, char *actor, const xs_dict *msg, const 
                 NULL, NULL,
                 xs_dict_get(msg, "sensitive"), xs_dict_get(msg, "summary"),
                 xs_stock_false, redir,
-                id, 0)),
+                id, NULL, 0)),
+            xs_html_tag("p", NULL));
+    }
+
+    { /** quote **/
+        /* the post textarea */
+        xs *ct      = build_mentions(snac, msg);
+        xs *div_id  = xs_fmt("%s_quote", md5);
+        xs *form_id = xs_fmt("%s_quote_form", md5);
+        xs *redir   = xs_fmt("%s_entry", md5);
+
+        xs_html_add(controls, xs_html_tag("div",
+            xs_html_tag("p", NULL),
+            html_note(snac, L("Quote..."),
+                div_id, form_id,
+                "", ct,
+                NULL, NULL,
+                xs_dict_get(msg, "sensitive"), xs_dict_get(msg, "summary"),
+                xs_stock_false, redir,
+                NULL, id, 0)),
             xs_html_tag("p", NULL));
     }
 
@@ -1471,6 +1506,19 @@ xs_html *html_entry(snac *user, xs_dict *msg, int read_only,
     else
     if (strcmp(type, "Note") == 0) {
         if (level == 0) {
+            char *quoting = xs_dict_get(msg, "quoteUrl");
+
+            if (user && !xs_is_null(quoting) && *quoting && !timeline_here(user, quoting)) {
+                xs_html_add(post_header,
+                    xs_html_tag("div",
+                        xs_html_attr("class", "snac-origin"),
+                        xs_html_text(L("quoting")),
+                        xs_html_text(" "),
+                        xs_html_tag("a",
+                            xs_html_attr("href", quoting),
+                            xs_html_text("»"))));
+            }
+
             /* is the parent not here? */
             char *parent = xs_dict_get(msg, "inReplyTo");
 
@@ -2161,7 +2209,7 @@ xs_html *html_people_list(snac *snac, xs_list *list, char *header, char *t)
                     NULL, actor_id,
                     xs_stock_false, "",
                     xs_stock_false, NULL,
-                    NULL, 0),
+                    NULL, NULL, 0),
                 xs_html_tag("p", NULL));
 
             xs_html_add(snac_post, snac_controls);
@@ -2796,7 +2844,7 @@ int html_post_handler(const xs_dict *req, const char *q_path,
                 if (valid_status(object_get(edit_id, &p_msg))) {
                     /* copy relevant fields from previous version */
                     char *fields[] = { "id", "context", "url", "published",
-                                       "to", "inReplyTo", NULL };
+                                       "to", "inReplyTo", "quoteUrl", NULL };
                     int n;
 
                     for (n = 0; fields[n]; n++) {

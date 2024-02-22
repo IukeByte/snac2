@@ -360,12 +360,14 @@ int timeline_request(snac *snac, char **id, xs_str **wrk, int level)
 
                     /* does it have an ancestor? */
                     char *in_reply_to = xs_dict_get(object, "inReplyTo");
+                    char *quoting = xs_dict_get(object, "quoteUrl");
 
                     /* store */
                     timeline_add(snac, nid, object);
 
                     /* recurse! */
                     timeline_request(snac, &in_reply_to, NULL, level + 1);
+                    timeline_request(snac, &quoting, NULL, level + 1);
                 }
             }
         }

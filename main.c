@@ -65,7 +65,8 @@ xs_html *html_note(snac *user, char *summary,
                    char *edit_id, char *actor_id,
                    xs_val *cw_yn, char *cw_text,
                    xs_val *mnt_only, char *redir,
-                   char *in_reply_to, int poll);
+                   char *in_reply_to, char *quoting,
+                   int poll);
 
 int main(int argc, char *argv[])
 {
