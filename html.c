@@ -736,7 +736,6 @@ static xs_html *html_user_body(snac *user, int read_only)
             xs_html_add(top_user,
                 xs_html_tag("div",
                     xs_html_attr("class", "snac-top-user-banner"),
-                    xs_html_attr("style", "clear: both"),
                     xs_html_sctag("br", NULL),
                     xs_html_sctag("img",
                         xs_html_attr("src", header))));
