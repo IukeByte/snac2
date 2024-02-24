@@ -399,18 +399,10 @@ xs_html *html_note(snac *user, char *summary,
                         xs_html_attr("value", "on"),
                         xs_html_text(L("Multiple choices")))),
                 xs_html_text(" "),
-                xs_html_tag("select",
-                    xs_html_attr("name",    "poll_end_secs"),
-                    xs_html_tag("option",
-                        xs_html_attr("value", "300"),
-                        xs_html_text(L("End in 5 minutes"))),
-                    xs_html_tag("option",
-                        xs_html_attr("value", "3600"),
-                        xs_html_attr("selected", NULL),
-                        xs_html_text(L("End in 1 hour"))),
-                    xs_html_tag("option",
-                        xs_html_attr("value", "86400"),
-                        xs_html_text(L("End in 1 day"))))));
+                xs_html_tag("input",
+                    xs_html_attr("type", "text"),
+                    xs_html_attr("class", "snac-polltime"),
+                    xs_html_attr("placeholder", "Time (in seconds) until the poll ends"))));
     }
 
     xs_html_add(form,
@@ -757,7 +749,7 @@ static xs_html *html_user_body(snac *user, int read_only)
 
     if (read_only) {
         xs *es1  = encode_html(xs_dict_get(user->config, "bio"));
-        xs *bio1 = not_really_markdown(es1, NULL);
+        xs *bio1 = not_really_markdown(es1, NULL, 1);
         xs *tags = xs_list_new();
         xs *bio2 = process_tags(user, bio1, &tags);
 
@@ -939,6 +931,8 @@ xs_html *html_top_controls(snac *snac)
     xs_val *d_dm_f_u  = xs_dict_get(snac->config, "drop_dm_from_unknown");
     xs_val *bot       = xs_dict_get(snac->config, "bot");
     xs_val *a_private = xs_dict_get(snac->config, "private");
+    xs_val *smileys   = xs_dict_get(snac->config, "smileys");
+
 
     xs *metadata = xs_str_new(NULL);
     xs_dict *md = xs_dict_get(snac->config, "metadata");
@@ -1072,6 +1066,15 @@ xs_html *html_top_controls(snac *snac)
                         xs_html_attr("for", "private"),
                         xs_html_text(L("This account is private "
                             "(posts are not shown through the web)")))),
+                xs_html_tag("p",
+                    xs_html_sctag("input",
+                        xs_html_attr("type", "checkbox"),
+                        xs_html_attr("name", "smileys"),
+                        xs_html_attr("id", "smileys"),
+                        xs_html_attr(xs_type(smileys) == XSTYPE_TRUE ? "checked" : "", NULL)),
+                    xs_html_tag("label",
+                        xs_html_attr("for", "smileys"),
+                        xs_html_text(L("Replace smileys in my posts with emojis")))),
                 xs_html_tag("p",
                     xs_html_text(L("Profile metadata (key=value pairs in each line):")),
                     xs_html_sctag("br", NULL),
@@ -2582,7 +2585,7 @@ int html_get_handler(const xs_dict *req, const char *q_path,
             return 403;
 
         xs *elems = timeline_simple_list(&snac, "public", 0, 20);
-        xs *bio   = not_really_markdown(xs_dict_get(snac.config, "bio"), NULL);
+        xs *bio   = not_really_markdown(xs_dict_get(snac.config, "bio"), NULL, 1);
 
         xs *rss_title = xs_fmt("%s (@%s@%s)",
             xs_dict_get(snac.config, "name"),
@@ -3025,6 +3028,10 @@ int html_post_handler(const xs_dict *req, const char *q_path,
             snac.config = xs_dict_set(snac.config, "private", xs_stock_true);
         else
             snac.config = xs_dict_set(snac.config, "private", xs_stock_false);
+        if ((v = xs_dict_get(p_vars, "smileys")) != NULL && strcmp(v, "on") == 0)
+            snac.config = xs_dict_set(snac.config, "smileys", xs_stock_true);
+        else snac.config = xs_dict_set(snac.config, "smileys", xs_stock_true);
+
         if ((v = xs_dict_get(p_vars, "metadata")) != NULL) {
             /* split the metadata and store it as a dict */
             xs_dict *md = xs_dict_new();

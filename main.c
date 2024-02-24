@@ -106,7 +106,7 @@ int main(int argc, char *argv[])
     if (strcmp(cmd, "markdown") == 0) { /** **/
         /* undocumented, for testing only */
         xs *c = xs_readall(stdin);
-        xs *fc = not_really_markdown(c, NULL);
+        xs *fc = not_really_markdown(c, NULL, 1);
 
         printf("<html>\n%s\n</html>\n", fc);
         return 0;

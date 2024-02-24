@@ -106,7 +106,7 @@ static xs_str *format_line(const char *line, xs_list **attach)
 }
 
 
-xs_str *not_really_markdown(const char *content, xs_list **attach)
+xs_str *not_really_markdown(const char *content, xs_list **attach, const char usesmileys)
 /* formats a content using some Markdown rules */
 {
     xs_str *s  = xs_str_new(NULL);
@@ -188,7 +188,7 @@ xs_str *not_really_markdown(const char *content, xs_list **attach)
     s = xs_replace_i(s, "</blockquote><br>", "</blockquote>");
     s = xs_replace_i(s, "</pre><br>", "</pre>");
 
-    {
+    if (usesmileys) {
         /* traditional emoticons */
         const char **emo = smileys;
 
