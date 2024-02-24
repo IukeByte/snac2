@@ -3030,7 +3030,7 @@ int html_post_handler(const xs_dict *req, const char *q_path,
             snac.config = xs_dict_set(snac.config, "private", xs_stock_false);
         if ((v = xs_dict_get(p_vars, "smileys")) != NULL && strcmp(v, "on") == 0)
             snac.config = xs_dict_set(snac.config, "smileys", xs_stock_true);
-        else snac.config = xs_dict_set(snac.config, "smileys", xs_stock_true);
+        else snac.config = xs_dict_set(snac.config, "smileys", xs_stock_false);
 
         if ((v = xs_dict_get(p_vars, "metadata")) != NULL) {
             /* split the metadata and store it as a dict */
