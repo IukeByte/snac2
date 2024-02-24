@@ -399,10 +399,18 @@ xs_html *html_note(snac *user, char *summary,
                         xs_html_attr("value", "on"),
                         xs_html_text(L("Multiple choices")))),
                 xs_html_text(" "),
-                xs_html_tag("input",
-                    xs_html_attr("type", "text"),
-                    xs_html_attr("class", "snac-polltime"),
-                    xs_html_attr("placeholder", "Time (in seconds) until the poll ends"))));
+                xs_html_tag("select",
+                    xs_html_attr("name",    "poll_end_secs"),
+                    xs_html_tag("option",
+                        xs_html_attr("value", "300"),
+                        xs_html_text(L("End in 5 minutes"))),
+                    xs_html_tag("option",
+                        xs_html_attr("value", "3600"),
+                        xs_html_attr("selected", NULL),
+                        xs_html_text(L("End in 1 hour"))),
+                    xs_html_tag("option",
+                        xs_html_attr("value", "86400"),
+                        xs_html_text(L("End in 1 day"))))));
     }
 
     xs_html_add(form,
