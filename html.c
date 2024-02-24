@@ -1082,7 +1082,7 @@ xs_html *html_top_controls(snac *snac)
                         xs_html_attr(xs_type(smileys) == XSTYPE_TRUE ? "checked" : "", NULL)),
                     xs_html_tag("label",
                         xs_html_attr("for", "smileys"),
-                        xs_html_text(L("Replace smileys in my posts with emojis")))),
+                        xs_html_text(L("Replace emoticons in my posts with emojis")))),
                 xs_html_tag("p",
                     xs_html_text(L("Profile metadata (key=value pairs in each line):")),
                     xs_html_sctag("br", NULL),
