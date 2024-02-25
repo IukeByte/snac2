@@ -9,6 +9,7 @@ typedef struct xs_html xs_html;
 xs_str *xs_html_encode(char *str);
 
 xs_html *xs_html_attr(char *key, char *value);
+xs_html *xs_html_attr_raw(char *key, char *value);
 xs_html *xs_html_text(char *content);
 xs_html *xs_html_raw(char *content);
 
@@ -100,6 +101,23 @@ xs_html *xs_html_attr(char *key, char *value)
     if (value) {
         xs *ev = xs_html_encode(value);
         a->content = xs_fmt("%s=\"%s\"", key, ev);
+    }
+    else
+        a->content = xs_dup(key);
+
+    return a;
+}
+
+
+xs_html *xs_html_attr_raw(char *key, char *value)
+/* creates an HTML block with an unencoded attribute */
+{
+    xs_html *a = XS_HTML_NEW();
+
+    a->type = XS_HTML_ATTR;
+
+    if (value) {
+        a->content = xs_fmt("%s=\"%s\"", key, value);
     }
     else
         a->content = xs_dup(key);
