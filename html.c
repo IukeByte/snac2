@@ -432,6 +432,9 @@ static xs_html *html_base_head(void)
             xs_html_attr("name", "viewport"),
             xs_html_attr("content", "width=device-width, initial-scale=1")),
         xs_html_sctag("meta",
+            xs_html_attr("http_equiv", "Content-Security-Policy"),
+            xs_html_attr_raw("content", L("script-src 'none'"))),
+        xs_html_sctag("meta",
             xs_html_attr("name", "generator"),
             xs_html_attr("content", USER_AGENT)));
 
