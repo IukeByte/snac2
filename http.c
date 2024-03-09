@@ -32,8 +32,7 @@ xs_dict *http_signed_request_raw(const char *keyid, const char *seckey,
     date = xs_str_utctime(0, "%a, %d %b %Y %H:%M:%S GMT");
 
     {
-        xs *s1 = xs_replace_n(url, "http:/" "/", "", 1);
-        xs *s = xs_replace_n(s1, "https:/" "/", "", 1);
+        xs *s = xs_replace_n(url, "https:/" "/", "", 1);
         l1 = xs_split_n(s, "/", 1);
     }
 
@@ -78,7 +77,8 @@ xs_dict *http_signed_request_raw(const char *keyid, const char *seckey,
 
     /* transfer the original headers */
     hdrs = xs_dict_new();
-    while (xs_dict_iter(&headers, &k, &v))
+    int c = 0;
+    while (xs_dict_next(headers, &k, &v, &c))
         hdrs = xs_dict_append(hdrs, k, v);
 
     /* add the new headers */

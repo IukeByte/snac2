@@ -1,8 +1,44 @@
 # Release Notes
 
+## 2.49
+
+Mastodon API: Fixed a bug in how validated links are reported.
+
+Mastodon API: Fixed a bug in search by account.
+
+Mastodon API: Fixed missing `Video` type objects in timelines.
+
+Mastodon API: Added search by hashtag.
+
+Some cosmetic fixes to the web interface.
+
+## 2.48
+
+A new instance page, that shows all posts by users in the same instance (like the public instance timeline, but interactive). This will help building communities.
+
+Follower-only replies to unknown users are not shown in timelines.
+
+Added verification of metadata links: if the linked page contains a link back to the snac user with a rel="me" attribute, it's marked as verified.
+
+Added a new server-level configuration parameter: `min_account_age`. If this value (in seconds) is set in `server.json`, any activity coming from accounts that were created newer than that will be discarded. This can be used to mitigate spam.
+
+Added a profile-page relation to links in webfinger responses (contributed by khm).
+
+Fixed some regressions and a crash.
+
 ## 2.47
 
+Added pagination to the notification page.
+
 The *New Post...* option now includes an optional field to set the URL of an ActivityPub post to be a reply to.
+
+Fixed spurious notifications from the same user.
+
+Fixed repeated mentions in the reply text field.
+
+One-post only pages include the post content instead of the user bio in their metadata (improving post previews from other software).
+
+Mastodon API: Added support for timelines by tag (for sites like e.g. https://fediwall.social to work).
 
 ## 2.46
 

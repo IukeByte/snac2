@@ -198,7 +198,7 @@ xs_list *get_attachments(const xs_dict *msg)
         /* ensure it's a list */
         if (xs_type(p) == XSTYPE_DICT) {
             attach = xs_list_new();
-            attach = xs_list_append(attach, v);
+            attach = xs_list_append(attach, p);
         }
         else
             attach = xs_dup(p);
@@ -310,7 +310,7 @@ int timeline_request(snac *snac, char **id, xs_str **wrk, int level)
 {
     int status = 0;
 
-    if (level < 256 && !xs_is_null(*id)) {
+    if (level < MAX_CONVERSATION_LEVELS && !xs_is_null(*id)) {
         xs *msg = NULL;
 
         /* is the object already there? */
@@ -593,6 +593,30 @@ int is_msg_public(const xs_dict *msg)
 }
 
 
+int is_msg_from_private_user(const xs_dict *msg)
+/* checks if a message is from a local, private user */
+{
+    int ret = 0;
+
+    /* is this message from a local user? */
+    if (xs_startswith(xs_dict_get(msg, "id"), srv_baseurl)) {
+        const char *atto = get_atto(msg);
+        xs *l = xs_split(atto, "/");
+        const char *uid = xs_list_get(l, -1);
+        snac user;
+
+        if (uid && user_open(&user, uid)) {
+            if (xs_type(xs_dict_get(user.config, "private")) == XSTYPE_TRUE)
+                ret = 1;
+
+            user_free(&user);
+        }
+    }
+
+    return ret;
+}
+
+
 int is_msg_for_me(snac *snac, const xs_dict *c_msg)
 /* checks if this message is for me */
 {
@@ -823,6 +847,10 @@ xs_str *process_tags(snac *snac, const char *content, xs_list **tag)
 void notify(snac *snac, const char *type, const char *utype, const char *actor, const xs_dict *msg)
 /* notifies the user of relevant events */
 {
+    /* skip our own notifications */
+    if (strcmp(snac->actor, actor) == 0)
+        return;
+
     const char *id = xs_dict_get(msg, "id");
 
     if (strcmp(type, "Create") == 0) {
@@ -1193,15 +1221,16 @@ xs_dict *msg_actor(snac *snac)
         xs_str *k;
         xs_str *v;
 
-        while (xs_dict_iter(&metadata, &k, &v)) {
+        int c = 0;
+        while (xs_dict_next(metadata, &k, &v, &c)) {
             xs *d = xs_dict_new();
 
             xs *k2 = encode_html(k);
             xs *v2 = NULL;
 
-            if (xs_startswith(v, "http")) {
+            if (xs_startswith(v, "https:")) {
                 xs *t = encode_html(v);
-                v2 = xs_fmt("<a href=\"%s\">%s</a>", t, t);
+                v2 = xs_fmt("<a href=\"%s\" rel=\"me\">%s</a>", t, t);
             }
             else
                 v2 = encode_html(v);
@@ -1291,7 +1320,7 @@ xs_dict *msg_follow(snac *snac, const char *q)
 
     xs *url_or_uid = xs_strip_i(xs_str_new(q));
 
-    if (xs_startswith(url_or_uid, "http"))
+    if (xs_startswith(url_or_uid, "https:/"))
         actor = xs_dup(url_or_uid);
     else
     if (!valid_status(webfinger_request(url_or_uid, &actor, NULL)) || actor == NULL) {
@@ -1798,6 +1827,38 @@ int process_input_message(snac *snac, xs_dict *msg, xs_dict *req)
         }
     }
 
+    /* check the minimum acceptable account age */
+    int min_account_age = xs_number_get(xs_dict_get(srv_config, "min_account_age"));
+
+    if (min_account_age > 0) {
+        char *actor_date = xs_dict_get(actor_o, "published");
+        if (!xs_is_null(actor_date)) {
+            time_t actor_t = xs_parse_iso_date(actor_date, 0);
+
+            if (actor_t < 950000000) {
+                snac_log(snac, xs_fmt("rejected activity from %s (suspicious date, %s)",
+                    actor, actor_date));
+
+                return 1;
+            }
+
+            if (actor_t > 0) {
+                int td = (int)(time(NULL) - actor_t);
+
+                snac_debug(snac, 2, xs_fmt("actor %s age: %d seconds", actor, td));
+
+                if (td < min_account_age) {
+                    snac_log(snac, xs_fmt("rejected activity from %s (too new, %d seconds)",
+                        actor, td));
+
+                    return 1;
+                }
+            }
+        }
+        else
+            snac_debug(snac, 1, xs_fmt("warning: empty or null creation date for %s", actor));
+    }
+
     if (strcmp(type, "Follow") == 0) { /** **/
         if (!follower_check(snac, actor)) {
             /* ensure the actor object is here */
@@ -1927,9 +1988,12 @@ int process_input_message(snac *snac, xs_dict *msg, xs_dict *req)
         if (xs_type(object) == XSTYPE_DICT)
             object = xs_dict_get(object, "id");
 
-        timeline_admire(snac, object, actor, 1);
-        snac_log(snac, xs_fmt("new 'Like' %s %s", actor, object));
-        do_notify = 1;
+        if (timeline_admire(snac, object, actor, 1) == 201) {
+            snac_log(snac, xs_fmt("new 'Like' %s %s", actor, object));
+            do_notify = 1;
+        }
+        else
+            snac_log(snac, xs_fmt("repeated 'Like' from %s to %s", actor, object));
     }
     else
     if (strcmp(type, "Announce") == 0) { /** **/
@@ -1955,9 +2019,13 @@ int process_input_message(snac *snac, xs_dict *msg, xs_dict *req)
                     xs *who_o = NULL;
 
                     if (valid_status(actor_request(snac, who, &who_o))) {
-                        timeline_admire(snac, object, actor, 0);
-                        snac_log(snac, xs_fmt("new 'Announce' %s %s", actor, object));
-                        do_notify = 1;
+                        if (timeline_admire(snac, object, actor, 0) == 201) {
+                            snac_log(snac, xs_fmt("new 'Announce' %s %s", actor, object));
+                            do_notify = 1;
+                        }
+                        else
+                            snac_log(snac, xs_fmt("repeated 'Announce' from %s to %s",
+                                actor, object));
                     }
                     else
                         snac_debug(snac, 1, xs_fmt("dropped 'Announce' on actor request error %s", who));
@@ -2162,6 +2230,10 @@ void process_user_queue_item(snac *snac, xs_dict *q_item)
 
         if (!xs_is_null(id))
             timeline_request_replies(snac, id);
+    }
+    else
+    if (strcmp(type, "verify_links") == 0) {
+        verify_links(snac);
     }
     else
         snac_log(snac, xs_fmt("unexpected user q_item type '%s'", type));
@@ -2386,7 +2458,8 @@ void process_queue_item(xs_dict *q_item)
                     if (is_msg_for_me(&user, msg)) {
                         xs *fn = xs_fmt("%s/queue/%s.json", user.basedir, ntid);
 
-                        snac_debug(&user, 1, xs_fmt("enqueue_input (from shared inbox) %s", fn));
+                        snac_debug(&user, 1,
+                            xs_fmt("enqueue_input (from shared inbox) %s", xs_dict_get(msg, "id")));
 
                         if (link(tmpfn, fn) < 0)
                             srv_log(xs_fmt("link(%s, %s) error", tmpfn, fn));
@@ -2402,7 +2475,7 @@ void process_queue_item(xs_dict *q_item)
 
             if (cnt == 0) {
                 srv_archive_qitem("no_valid_recipients", q_item);
-                srv_debug(1, xs_fmt("no valid recipients for %s", tmpfn));
+                srv_debug(1, xs_fmt("no valid recipients for %s", xs_dict_get(msg, "id")));
             }
         }
     }

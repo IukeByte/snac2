@@ -72,7 +72,6 @@ xs_str *replace_shortnames(xs_str *s, xs_list *tag, int ems)
                     xs_html *img = xs_html_sctag("img",
                         xs_html_attr("loading", "lazy"),
                         xs_html_attr("src", u),
-                        xs_html_attr("title", n),
                         xs_html_attr("style", style));
 
                     xs *s1 = xs_html_render(img);
@@ -552,7 +551,7 @@ static xs_html *html_instance_body(char *tag)
 }
 
 
-xs_html *html_user_head(snac *user)
+xs_html *html_user_head(snac *user, char *desc)
 {
     xs_html *head = html_base_head();
 
@@ -595,13 +594,22 @@ xs_html *html_user_head(snac *user)
         avatar = xs_fmt("%s/susie.png", srv_baseurl);
     }
 
-    xs *s_bio = xs_dup(xs_dict_get(user->config, "bio"));
+    /* create a description field */
+    xs *s_desc = NULL;
     int n;
 
-    /* shorten the bio */
-    for (n = 0; s_bio[n] && s_bio[n] != '&' && s_bio[n] != '.' &&
-                s_bio[n] != '\r' && s_bio[n] != '\n' && n < 128; n++);
-    s_bio[n] = '\0';
+    if (desc == NULL)
+        s_desc = xs_dup(xs_dict_get(user->config, "bio"));
+    else
+        s_desc = xs_dup(desc);
+
+    /* shorten desc to a reasonable size */
+    for (n = 0; s_desc[n]; n++) {
+        if (n > 512 && (s_desc[n] == ' ' || s_desc[n] == '\n'))
+            break;
+    }
+
+    s_desc[n] = '\0';
 
     /* og properties */
     xs_html_add(head,
@@ -613,7 +621,7 @@ xs_html *html_user_head(snac *user)
             xs_html_attr("content", title)),
         xs_html_sctag("meta",
             xs_html_attr("property", "og:description"),
-            xs_html_attr("content", s_bio)),
+            xs_html_attr("content", s_desc)),
         xs_html_sctag("meta",
             xs_html_attr("property", "og:image"),
             xs_html_attr("content", avatar)),
@@ -637,7 +645,7 @@ xs_html *html_user_head(snac *user)
 }
 
 
-static xs_html *html_user_body(snac *user, int local)
+static xs_html *html_user_body(snac *user, int read_only)
 {
     xs_html *body = xs_html_tag("body", NULL);
 
@@ -658,7 +666,7 @@ static xs_html *html_user_body(snac *user, int local)
             xs_html_attr("class", "snac-avatar"),
             xs_html_attr("alt", "")));
 
-    if (local) {
+    if (read_only) {
         xs *rss_url = xs_fmt("%s.rss", user->actor);
         xs *admin_url = xs_fmt("%s/admin", user->actor);
 
@@ -673,8 +681,7 @@ static xs_html *html_user_body(snac *user, int local)
                 xs_html_text(L("private"))));
     }
     else {
-        xs *n_list = notify_list(user, 1);
-        int n_len  = xs_list_len(n_list);
+        int n_len = notify_new_num(user);
         xs_html *notify_count = NULL;
 
         /* show the number of new notifications, if there are any */
@@ -690,6 +697,8 @@ static xs_html *html_user_body(snac *user, int local)
         xs *admin_url = xs_fmt("%s/admin", user->actor);
         xs *notify_url = xs_fmt("%s/notifications", user->actor);
         xs *people_url = xs_fmt("%s/people", user->actor);
+        xs *instance_url = xs_fmt("%s/instance", user->actor);
+
         xs_html_add(top_nav,
             xs_html_tag("a",
                 xs_html_attr("href", user->actor),
@@ -706,7 +715,11 @@ static xs_html *html_user_body(snac *user, int local)
             xs_html_text(" - "),
             xs_html_tag("a",
                 xs_html_attr("href", people_url),
-                xs_html_text(L("people"))));
+                xs_html_text(L("people"))),
+            xs_html_text(" - "),
+            xs_html_tag("a",
+                xs_html_attr("href", instance_url),
+                xs_html_text(L("instance"))));
     }
 
     xs_html_add(body,
@@ -716,7 +729,7 @@ static xs_html *html_user_body(snac *user, int local)
     xs_html *top_user = xs_html_tag("div",
         xs_html_attr("class", "h-card snac-top-user"));
 
-    if (local) {
+    if (read_only) {
         char *header = xs_dict_get(user->config, "header");
         if (header && *header) {
             xs_html_add(top_user,
@@ -741,7 +754,7 @@ static xs_html *html_user_body(snac *user, int local)
             xs_html_attr("class", "snac-top-user-id"),
             xs_html_text(handle)));
 
-    if (local) {
+    if (read_only) {
         xs *es1  = encode_html(xs_dict_get(user->config, "bio"));
         xs *bio1 = not_really_markdown(es1, NULL);
         xs *tags = xs_list_new();
@@ -759,16 +772,46 @@ static xs_html *html_user_body(snac *user, int local)
             xs_str *k;
             xs_str *v;
 
+            xs_dict *val_links = user->links;
+            if (xs_is_null(val_links))
+                val_links = xs_stock_dict;
+
             xs_html *snac_metadata = xs_html_tag("div",
                 xs_html_attr("class", "snac-metadata"));
 
-            while (xs_dict_iter(&metadata, &k, &v)) {
+            int c = 0;
+            while (xs_dict_next(metadata, &k, &v, &c)) {
                 xs_html *value;
 
-                if (xs_startswith(v, "http"))
-                    value = xs_html_tag("a",
-                        xs_html_attr("href", v),
-                        xs_html_text(v));
+                if (xs_startswith(v, "https:/" "/")) {
+                    /* is this link validated? */
+                    xs *verified_link = NULL;
+                    xs_number *val_time = xs_dict_get(val_links, v);
+
+                    if (xs_type(val_time) == XSTYPE_NUMBER) {
+                        time_t t = xs_number_get(val_time);
+
+                        if (t > 0) {
+                            xs *s1 = xs_str_utctime(t, ISO_DATE_SPEC);
+                            verified_link = xs_fmt("%s (%s)", L("verified link"), s1);
+                        }
+                    }
+
+                    if (!xs_is_null(verified_link)) {
+                        value = xs_html_tag("span",
+                            xs_html_attr("title", verified_link),
+                            xs_html_raw("&#10004; "),
+                            xs_html_tag("a",
+                                xs_html_attr("href", v),
+                                xs_html_attr("rel", "me"),
+                                xs_html_text(v)));
+                    }
+                    else {
+                        value = xs_html_tag("a",
+                            xs_html_attr("href", v),
+                            xs_html_text(v));
+                    }
+                }
                 else
                     value = xs_html_text(v);
 
@@ -777,7 +820,7 @@ static xs_html *html_user_body(snac *user, int local)
                         xs_html_attr("class", "snac-property-name"),
                         xs_html_text(k)),
                     xs_html_text(":"),
-                    xs_html_sctag("br", NULL),
+                    xs_html_raw("&nbsp;"),
                     xs_html_tag("span",
                         xs_html_attr("class", "snac-property-value"),
                         value),
@@ -902,7 +945,8 @@ xs_html *html_top_controls(snac *snac)
     xs_str *k;
     xs_str *v;
 
-    while (xs_dict_iter(&md, &k, &v)) {
+    int c = 0;
+    while (xs_dict_next(md, &k, &v, &c)) {
         xs *kp = xs_fmt("%s=%s", k, v);
 
         if (*metadata)
@@ -1111,12 +1155,16 @@ xs_str *build_mentions(snac *snac, const xs_dict *msg)
 
                 if (xs_list_len(l2) >= 3) {
                     xs *s1 = xs_fmt("%s@%s ", name, xs_list_get(l2, 2));
-                    s = xs_str_cat(s, s1);
+
+                    if (xs_str_in(s, s1) == -1)
+                        s = xs_str_cat(s, s1);
                 }
             }
             else {
-                s = xs_str_cat(s, name);
-                s = xs_str_cat(s, " ");
+                if (xs_str_in(s, name) == -1) {
+                    s = xs_str_cat(s, name);
+                    s = xs_str_cat(s, " ");
+                }
             }
         }
     }
@@ -1265,7 +1313,7 @@ xs_html *html_entry_controls(snac *snac, char *actor, const xs_dict *msg, const 
 }
 
 
-xs_html *html_entry(snac *user, xs_dict *msg, int local,
+xs_html *html_entry(snac *user, xs_dict *msg, int read_only,
                    int level, char *md5, int hide_children)
 {
     char *id    = xs_dict_get(msg, "id");
@@ -1274,16 +1322,23 @@ xs_html *html_entry(snac *user, xs_dict *msg, int local,
     char *v;
 
     /* do not show non-public messages in the public timeline */
-    if ((local || !user) && !is_msg_public(msg))
+    if ((read_only || !user) && !is_msg_public(msg))
         return NULL;
 
     /* hidden? do nothing more for this conversation */
-    if (user && is_hidden(user, id))
-        return NULL;
+    if (user && is_hidden(user, id)) {
+        xs *s1 = xs_fmt("%s_entry", md5);
+
+        /* return just an dummy anchor, to keep position after hitting 'Hide' */
+        return xs_html_tag("div",
+            xs_html_tag("a",
+                xs_html_attr("name", s1)));
+    }
 
     /* avoid too deep nesting, as it may be a loop */
-    if (level >= 256)
-        return NULL;
+    if (level >= MAX_CONVERSATION_LEVELS)
+        return xs_html_tag("mark",
+            xs_html_text(L("Truncated (too deep)")));
 
     if (strcmp(type, "Follow") == 0) {
         return xs_html_tag("div",
@@ -1293,7 +1348,7 @@ xs_html *html_entry(snac *user, xs_dict *msg, int local,
                 xs_html_tag("div",
                     xs_html_attr("class", "snac-origin"),
                     xs_html_text(L("follows you"))),
-                html_msg_icon(local ? NULL : user, xs_dict_get(msg, "actor"), msg)));
+                html_msg_icon(read_only ? NULL : user, xs_dict_get(msg, "actor"), msg)));
     }
     else
     if (!xs_match(type, "Note|Question|Page|Article|Video")) {
@@ -1310,8 +1365,14 @@ xs_html *html_entry(snac *user, xs_dict *msg, int local,
         return NULL;
 
     /* ignore muted morons immediately */
-    if (user && is_muted(user, actor))
-        return NULL;
+    if (user && is_muted(user, actor)) {
+        xs *s1 = xs_fmt("%s_entry", md5);
+
+        /* return just an dummy anchor, to keep position after hitting 'MUTE' */
+        return xs_html_tag("div",
+            xs_html_tag("a",
+                xs_html_attr("name", s1)));
+    }
 
     if ((user == NULL || strcmp(actor, user->actor) != 0)
         && !valid_status(actor_get(actor, NULL)))
@@ -1404,11 +1465,19 @@ xs_html *html_entry(snac *user, xs_dict *msg, int local,
 
             if (!xs_is_null(name)) {
                 xs *href = NULL;
+                char *id = xs_dict_get(actor_r, "id");
+                int fwers = 0;
+                int fwing = 0;
 
-                if (!local && user != NULL)
+                if (user != NULL) {
+                    fwers = follower_check(user, id);
+                    fwing = following_check(user, id);
+                }
+
+                if (!read_only && (fwers || fwing))
                     href = xs_fmt("%s/people#%s", user->actor, p);
                 else
-                    href = xs_dup(xs_dict_get(actor_r, "id"));
+                    href = xs_dup(id);
 
                 xs_html_add(post_header,
                     xs_html_tag("div",
@@ -1441,7 +1510,7 @@ xs_html *html_entry(snac *user, xs_dict *msg, int local,
     }
 
     xs_html_add(post_header,
-        html_msg_icon(local ? NULL : user, actor, msg));
+        html_msg_icon(read_only ? NULL : user, actor, msg));
 
     /** post content **/
 
@@ -1469,7 +1538,7 @@ xs_html *html_entry(snac *user, xs_dict *msg, int local,
 
         /* only show it when not in the public timeline and the config setting is "open" */
         char *cw = xs_dict_get(user->config, "cw");
-        if (xs_is_null(cw) || local)
+        if (xs_is_null(cw) || read_only)
             cw = "";
 
         snac_content = xs_html_tag("details",
@@ -1533,7 +1602,7 @@ xs_html *html_entry(snac *user, xs_dict *msg, int local,
 
         xs_html *poll = xs_html_tag("div", NULL);
 
-        if (local)
+        if (read_only)
             closed = 1; /* non-identified page; show as closed */
         else
         if (xs_dict_get(msg, "closed"))
@@ -1754,7 +1823,7 @@ xs_html *html_entry(snac *user, xs_dict *msg, int local,
 
     /** controls **/
 
-    if (!local && user) {
+    if (!read_only && user) {
         xs_html_add(entry,
             html_entry_controls(user, actor, msg, md5));
     }
@@ -1798,7 +1867,7 @@ xs_html *html_entry(snac *user, xs_dict *msg, int local,
                     object_get_by_md5(cmd5, &chd);
 
                 if (chd != NULL && xs_is_null(xs_dict_get(chd, "name"))) {
-                    xs_html *che = html_entry(user, chd, local, level + 1, cmd5, hide_children);
+                    xs_html *che = html_entry(user, chd, read_only, level + 1, cmd5, hide_children);
 
                     if (che != NULL) {
                         if (left > 3)
@@ -1838,20 +1907,32 @@ xs_html *html_footer(void)
 }
 
 
-xs_str *html_timeline(snac *user, const xs_list *list, int local,
-                      int skip, int show, int show_more, char *tag)
+xs_str *html_timeline(snac *user, const xs_list *list, int read_only,
+                      int skip, int show, int show_more,
+                      char *tag, char *page, int utl)
 /* returns the HTML for the timeline */
 {
     xs_list *p = (xs_list *)list;
     char *v;
     double t = ftime();
 
+    xs *desc = NULL;
+
+    if (xs_list_len(list) == 1) {
+        /* only one element? pick the description from the source */
+        char *id = xs_list_get(list, 0);
+        xs *d = NULL;
+        object_get_by_md5(id, &d);
+        if (d && (v = xs_dict_get(d, "sourceContent")) != NULL)
+            desc = xs_dup(v);
+    }
+
     xs_html *head;
     xs_html *body;
 
     if (user) {
-        head = html_user_head(user);
-        body = html_user_body(user, local);
+        head = html_user_head(user, desc);
+        body = html_user_body(user, read_only);
     }
     else {
         head = html_instance_head();
@@ -1862,7 +1943,7 @@ xs_str *html_timeline(snac *user, const xs_list *list, int local,
         head,
         body);
 
-    if (user && !local)
+    if (user && !read_only)
         xs_html_add(body,
             html_top_controls(user));
 
@@ -1880,7 +1961,7 @@ xs_str *html_timeline(snac *user, const xs_list *list, int local,
         xs *msg = NULL;
         int status;
 
-        if (user && !is_pinned_by_md5(user, v))
+        if (utl && user && !is_pinned_by_md5(user, v))
             status = timeline_get_by_md5(user, v, &msg);
         else
             status = object_get_by_md5(v, &msg);
@@ -1888,33 +1969,29 @@ xs_str *html_timeline(snac *user, const xs_list *list, int local,
         if (!valid_status(status))
             continue;
 
-        /* if it's an instance page, discard private users */
-        if (user == NULL && xs_startswith(xs_dict_get(msg, "id"), srv_baseurl)) {
-            const char *atto = get_atto(msg);
-            xs *l = xs_split(atto, "/");
-            const char *uid = xs_list_get(l, -1);
-            snac user;
-            int skip = 1;
+        /* if it's an instance page, discard messages from private users */
+        if (user == NULL && is_msg_from_private_user(msg))
+            continue;
 
-            if (uid && user_open(&user, uid)) {
-                if (xs_type(xs_dict_get(user.config, "private")) != XSTYPE_TRUE)
-                    skip = 0;
+        /* is this message a non-public reply? */
+        if (user != NULL && !is_msg_public(msg)) {
+            char *irt = xs_dict_get(msg, "inReplyTo");
 
-                user_free(&user);
-            }
-
-            if (skip)
+            if (!xs_is_null(irt) && !object_here(irt)) {
+                snac_debug(user, 1, xs_fmt("skipping non-public reply to an unknown post %s", v));
                 continue;
+            }
         }
 
-        xs_html *entry = html_entry(user, msg, local, 0, v, user ? 0 : 1);
+        xs_html *entry = html_entry(user, msg, read_only, 0, v, user ? 0 : 1);
 
         if (entry != NULL)
             xs_html_add(posts,
                 entry);
     }
 
-    if (list && user && local) {
+    if (list && user && read_only) {
+        /** history **/
         if (xs_type(xs_dict_get(srv_config, "disable_history")) != XSTYPE_TRUE) {
             xs_html *ul = xs_html_tag("ul", NULL);
 
@@ -1956,12 +2033,15 @@ xs_str *html_timeline(snac *user, const xs_list *list, int local,
         xs *m  = NULL;
         xs *ss = xs_fmt("skip=%d&show=%d", skip + show, show);
 
+        xs *url = page == NULL || user == NULL ?
+            xs_dup(srv_baseurl) : xs_fmt("%s%s", user->actor, page);
+
         if (tag) {
-            t = xs_fmt("%s?t=%s", srv_baseurl, tag);
+            t = xs_fmt("%s?t=%s", url, tag);
             m = xs_fmt("%s&%s", t, ss);
         }
         else {
-            t = xs_fmt("%s%s", user ? user->actor : srv_baseurl, local ? "" : "/admin");
+            t = xs_dup(url);
             m = xs_fmt("%s?%s", t, ss);
         }
 
@@ -2122,7 +2202,7 @@ xs_str *html_people(snac *user)
     xs *wers = follower_list(user);
 
     xs_html *html = xs_html_tag("html",
-        html_user_head(user),
+        html_user_head(user, NULL),
         xs_html_add(html_user_body(user, 0),
             html_people_list(user, wing, L("People you follow"), "i"),
             html_people_list(user, wers, L("People that follow you"), "e"),
@@ -2132,15 +2212,15 @@ xs_str *html_people(snac *user)
 }
 
 
-xs_str *html_notifications(snac *user)
+xs_str *html_notifications(snac *user, int skip, int show)
 {
-    xs *n_list = notify_list(user, 0);
+    xs *n_list = notify_list(user, skip, show);
     xs *n_time = notify_check_time(user, 0);
 
     xs_html *body = html_user_body(user, 0);
 
     xs_html *html = xs_html_tag("html",
-        html_user_head(user),
+        html_user_head(user, NULL),
         body);
 
     xs *clear_all_action = xs_fmt("%s/admin/clear-notifications", user->actor);
@@ -2269,6 +2349,19 @@ xs_str *html_notifications(snac *user)
                 xs_html_attr("class", "snac-header"),
                 xs_html_text(L("None"))));
 
+    /* add the navigation footer */
+    xs *next_p = notify_list(user, skip + show, 1);
+    if (xs_list_len(next_p)) {
+        xs *url = xs_fmt("%s/notifications?skip=%d&show=%d",
+            user->actor, skip + show, show);
+
+        xs_html_add(body,
+            xs_html_tag("p",
+                xs_html_tag("a",
+                    xs_html_attr("href", url),
+                    xs_html_text(L("More...")))));
+    }
+
     xs_html_add(body,
         html_footer());
 
@@ -2341,7 +2434,8 @@ int html_get_handler(const xs_dict *req, const char *q_path,
         xs *h = xs_str_localtime(0, "%Y-%m.html");
 
         if (xs_type(xs_dict_get(snac.config, "private")) == XSTYPE_TRUE) {
-            *body = html_timeline(&snac, NULL, 1, 0, 0, 0, NULL);
+            /** empty public timeline for private users **/
+            *body = html_timeline(&snac, NULL, 1, 0, 0, 0, NULL, "", 1);
             *b_size = strlen(*body);
             status  = 200;
         }
@@ -2359,7 +2453,7 @@ int html_get_handler(const xs_dict *req, const char *q_path,
             xs *pins = pinned_list(&snac);
             pins = xs_list_cat(pins, list);
 
-            *body = html_timeline(&snac, pins, 1, skip, show, xs_list_len(next), NULL);
+            *body = html_timeline(&snac, pins, 1, skip, show, xs_list_len(next), NULL, "", 1);
 
             *b_size = strlen(*body);
             status  = 200;
@@ -2375,7 +2469,13 @@ int html_get_handler(const xs_dict *req, const char *q_path,
             status = 401;
         }
         else {
-            if (cache && history_mtime(&snac, "timeline.html_") > timeline_mtime(&snac)) {
+            double t = history_mtime(&snac, "timeline.html_");
+
+            /* if enabled by admin, return a cached page if its timestamp is:
+               a) newer than the timeline timestamp
+               b) newer than the start time of the server
+            */
+            if (cache && t > timeline_mtime(&snac) && t > p_state->srv_start_time) {
                 snac_debug(&snac, 1, xs_fmt("serving cached timeline"));
 
                 status = history_get(&snac, "timeline.html_", body, b_size,
@@ -2390,7 +2490,8 @@ int html_get_handler(const xs_dict *req, const char *q_path,
                 xs *pins = pinned_list(&snac);
                 pins = xs_list_cat(pins, list);
 
-                *body = html_timeline(&snac, pins, 0, skip, show, xs_list_len(next), NULL);
+                *body = html_timeline(&snac, pins, 0, skip, show,
+                        xs_list_len(next), NULL, "/admin", 1);
 
                 *b_size = strlen(*body);
                 status  = 200;
@@ -2419,7 +2520,23 @@ int html_get_handler(const xs_dict *req, const char *q_path,
             status = 401;
         }
         else {
-            *body   = html_notifications(&snac);
+            *body   = html_notifications(&snac, skip, show);
+            *b_size = strlen(*body);
+            status  = 200;
+        }
+    }
+    else
+    if (strcmp(p_path, "instance") == 0) { /** instance timeline **/
+        if (!login(&snac, req)) {
+            *body  = xs_dup(uid);
+            status = 401;
+        }
+        else {
+            xs *list = timeline_instance_list(skip, show);
+            xs *next = timeline_instance_list(skip + show, 1);
+
+            *body = html_timeline(&snac, list, 0, skip, show,
+                xs_list_len(next), NULL, "/instance", 0);
             *b_size = strlen(*body);
             status  = 200;
         }
@@ -2438,7 +2555,7 @@ int html_get_handler(const xs_dict *req, const char *q_path,
 
             list = xs_list_append(list, md5);
 
-            *body   = html_timeline(&snac, list, 1, 0, 0, 0, NULL);
+            *body   = html_timeline(&snac, list, 1, 0, 0, 0, NULL, "", 1);
             *b_size = strlen(*body);
             status  = 200;
         }
@@ -3007,6 +3124,8 @@ int html_post_handler(const xs_dict *req, const char *q_path,
         xs *u_msg = msg_update(&snac, a_msg);
 
         enqueue_message(&snac, u_msg);
+
+        enqueue_verify_links(&snac);
 
         status = 303;
     }

@@ -67,7 +67,7 @@ int srv_open(char *basedir, int auto_upgrade)
             if (host == NULL || prefix == NULL)
                 error = xs_str_new("ERROR: cannot get server data");
             else {
-                srv_baseurl = xs_fmt("http://%s%s", host, prefix);
+                srv_baseurl = xs_fmt("https://%s%s", host, prefix);
 
                 dbglevel = (int) xs_number_get(dbglvl);
 
@@ -101,6 +101,13 @@ int srv_open(char *basedir, int auto_upgrade)
 
     xs *tmpdir = xs_fmt("%s/tmp", srv_basedir);
     mkdirx(tmpdir);
+
+#ifdef __APPLE__
+/* Apple uses st_atimespec instead of st_atim etc */
+#define st_atim st_atimespec
+#define st_ctim st_ctimespec
+#define st_mtim st_mtimespec
+#endif
 
 #ifdef __OpenBSD__
     char *v = xs_dict_get(srv_config, "disable_openbsd_security");
@@ -146,6 +153,7 @@ void user_free(snac *snac)
     xs_free(snac->config);
     xs_free(snac->config_o);
     xs_free(snac->key);
+    xs_free(snac->links);
     xs_free(snac->actor);
     xs_free(snac->md5);
 }
@@ -233,6 +241,14 @@ int user_open(snac *user, const char *uid)
         }
         else
             srv_debug(2, xs_fmt("error opening '%s' %d", cfg_file, errno));
+
+        /* verified links */
+        xs *links_file = xs_fmt("%s/links.json", user->basedir);
+
+        if ((f = fopen(links_file, "r")) != NULL) {
+            user->links = xs_json_load(f);
+            fclose(f);
+        }
     }
     else
         srv_debug(1, xs_fmt("invalid user '%s'", uid));
@@ -1098,7 +1114,7 @@ int timeline_add(snac *snac, const char *id, const xs_dict *o_msg)
 }
 
 
-void timeline_admire(snac *snac, const char *id, const char *admirer, int like)
+int timeline_admire(snac *snac, const char *id, const char *admirer, int like)
 /* updates a timeline entry with a new admiration */
 {
     /* if we are admiring this, add to both timelines */
@@ -1107,10 +1123,12 @@ void timeline_admire(snac *snac, const char *id, const char *admirer, int like)
         object_user_cache_add(snac, id, "private");
     }
 
-    object_admire(id, admirer, like);
+    int ret = object_admire(id, admirer, like);
 
     snac_debug(snac, 1, xs_fmt("timeline_admire (%s) %s %s",
             like ? "Like" : "Announce", id, admirer));
+
+    return ret;
 }
 
 
@@ -1533,6 +1551,7 @@ int actor_get(const char *actor, xs_dict **data)
     else
         d = xs_free(d);
 
+#ifdef STALE_ACTORS
     xs *fn = _object_fn(actor);
     double max_time;
 
@@ -1547,6 +1566,7 @@ int actor_get(const char *actor, xs_dict **data)
 
         status = 205; /* "205: Reset Content" "110: Response Is Stale" */
     }
+#endif /* STALE_ACTORS */
 
     return status;
 }
@@ -1924,8 +1944,7 @@ xs_list *inbox_list(void)
 
 xs_str *_instance_block_fn(const char *instance)
 {
-    xs *s  = xs_replace(instance, "http:/" "/", "");
-    xs *s1  = xs_replace(s, "https:/" "/", "");
+    xs *s1  = xs_replace(instance, "https:/" "/", "");
     xs *l   = xs_split(s1, "/");
     char *p = xs_list_get(l, 0);
     xs *md5 = xs_md5_hex(p, strlen(p));
@@ -2046,13 +2065,33 @@ void notify_add(snac *snac, const char *type, const char *utype,
         xs_json_dump(noti, 4, f);
         fclose(f);
     }
+
+    /* add it to the index if it already exists */
+    xs *idx = xs_fmt("%s/notify.idx", snac->basedir);
+
+    if (mtime(idx) != 0.0) {
+        pthread_mutex_lock(&data_mutex);
+
+        if ((f = fopen(idx, "a")) != NULL) {
+            fprintf(f, "%-32s\n", ntid);
+            fclose(f);
+        }
+
+        pthread_mutex_unlock(&data_mutex);
+    }
 }
 
 
 xs_dict *notify_get(snac *snac, const char *id)
 /* gets a notification */
 {
-    xs *fn = xs_fmt("%s/notify/%s.json", snac->basedir, id);
+    /* base file */
+    xs *fn = xs_fmt("%s/notify/%s", snac->basedir, id);
+
+    /* strip spaces and add extension */
+    fn = xs_strip_i(fn);
+    fn = xs_str_cat(fn, ".json");
+
     FILE *f;
     xs_dict *out = NULL;
 
@@ -2065,32 +2104,62 @@ xs_dict *notify_get(snac *snac, const char *id)
 }
 
 
-xs_list *notify_list(snac *snac, int new_only)
-/* returns a list of notification ids, optionally only the new ones */
+xs_list *notify_list(snac *snac, int skip, int show)
+/* returns a list of notification ids */
 {
-    xs *t = NULL;
+    xs *idx = xs_fmt("%s/notify.idx", snac->basedir);
 
-    /* if only new ones are requested, get the last time */
-    if (new_only)
-        t = notify_check_time(snac, 0);
+    if (mtime(idx) == 0.0) {
+        /* create the index from scratch */
+        FILE *f;
 
-    xs *spec     = xs_fmt("%s/notify/" "*.json", snac->basedir);
-    xs *lst      = xs_glob(spec, 1, 1);
-    xs_list *out = xs_list_new();
-    xs_list *p   = lst;
+        pthread_mutex_lock(&data_mutex);
+
+        if ((f = fopen(idx, "w")) != NULL) {
+            xs *spec = xs_fmt("%s/notify/" "*.json", snac->basedir);
+            xs *lst  = xs_glob(spec, 1, 0);
+            xs_list *p = lst;
+            char *v;
+
+            while (xs_list_iter(&p, &v)) {
+                char *p = strrchr(v, '.');
+                if (p) {
+                    *p = '\0';
+                    fprintf(f, "%-32s\n", v);
+                }
+            }
+
+            fclose(f);
+        }
+
+        pthread_mutex_unlock(&data_mutex);
+    }
+
+    return index_list_desc(idx, skip, show);
+}
+
+
+int notify_new_num(snac *snac)
+/* counts the number of new notifications */
+{
+    xs *t = notify_check_time(snac, 0);
+    xs *lst = notify_list(snac, 0, XS_ALL);
+    int cnt = 0;
+
+    xs_list *p = lst;
     xs_str *v;
 
     while (xs_list_iter(&p, &v)) {
-        xs *id = xs_replace(v, ".json", "");
+        xs *id = xs_strip_i(xs_dup(v));
 
-        /* old? */
-        if (t != NULL && strcmp(id, t) < 0)
-            continue;
+        /* old? count no more */
+        if (strcmp(id, t) < 0)
+            break;
 
-        out = xs_list_append(out, id);
+        cnt++;
     }
 
-    return out;
+    return cnt;
 }
 
 
@@ -2104,6 +2173,14 @@ void notify_clear(snac *snac)
 
     while (xs_list_iter(&p, &v))
         unlink(v);
+
+    xs *idx = xs_fmt("%s/notify.idx", snac->basedir);
+
+    if (mtime(idx) != 0.0) {
+        pthread_mutex_lock(&data_mutex);
+        truncate(idx, 0);
+        pthread_mutex_unlock(&data_mutex);
+    }
 }
 
 
@@ -2155,7 +2232,7 @@ void enqueue_input(snac *snac, const xs_dict *msg, const xs_dict *req, int retri
 
     qmsg = _enqueue_put(fn, qmsg);
 
-    snac_debug(snac, 1, xs_fmt("enqueue_input %s", fn));
+    snac_debug(snac, 1, xs_fmt("enqueue_input %s", xs_dict_get(msg, "id")));
 }
 
 
@@ -2170,7 +2247,7 @@ void enqueue_shared_input(const xs_dict *msg, const xs_dict *req, int retries)
 
     qmsg = _enqueue_put(fn, qmsg);
 
-    srv_debug(1, xs_fmt("enqueue_shared_input %s", fn));
+    srv_debug(1, xs_fmt("enqueue_shared_input %s", xs_dict_get(msg, "id")));
 }
 
 
@@ -2294,6 +2371,19 @@ void enqueue_close_question(snac *user, const char *id, int end_secs)
     qmsg = _enqueue_put(fn, qmsg);
 
     snac_debug(user, 0, xs_fmt("enqueue_close_question %s", id));
+}
+
+
+void enqueue_verify_links(snac *user)
+/* enqueues a link verification */
+{
+    xs *qmsg   = _new_qmsg("verify_links", "", 0);
+    char *ntid = xs_dict_get(qmsg, "ntid");
+    xs *fn     = xs_fmt("%s/queue/%s.json", user->basedir, ntid);
+
+    qmsg = _enqueue_put(fn, qmsg);
+
+    snac_debug(user, 1, xs_fmt("enqueue_verify_links %s", user->actor));
 }
 
 
@@ -2633,6 +2723,9 @@ void purge_user(snac *snac)
         int gc = index_gc(idx);
         srv_debug(1, xs_fmt("purge: %s %d", idx, gc));
     }
+
+    /* unrelated to purging, but it's a janitorial process, so what the hell */
+    verify_links(snac);
 }
 
 

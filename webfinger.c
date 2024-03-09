@@ -19,10 +19,9 @@ int webfinger_request_signed(snac *snac, const char *qs, char **actor, char **us
     xs_str *host = NULL;
     xs *resource = NULL;
 
-    if (xs_startswith(qs, "http")) {
+    if (xs_startswith(qs, "https:/" "/")) {
         /* actor query: pick the host */
-        xs *s1 = xs_replace_n(qs, "http:/" "/", "", 1);
-        xs *s = xs_replace_n(s1, "https:/" "/", "", 1);
+        xs *s = xs_replace_n(qs, "https:/" "/", "", 1);
 
         l = xs_split_n(s, "/", 1);
 
@@ -70,7 +69,7 @@ int webfinger_request_signed(snac *snac, const char *qs, char **actor, char **us
                                        &payload, &p_size, &ctype);
     }
     else {
-        xs *url = xs_fmt("http:/" "/%s/.well-known/webfinger?resource=%s", host, resource);
+        xs *url = xs_fmt("https:/" "/%s/.well-known/webfinger?resource=%s", host, resource);
 
         if (snac == NULL)
             xs_http_request("GET", url, headers, NULL, 0, &status, &payload, &p_size, 0);
@@ -140,7 +139,7 @@ int webfinger_get_handler(xs_dict *req, char *q_path,
     snac snac;
     int found = 0;
 
-    if (xs_startswith(resource, "https")) {
+    if (xs_startswith(resource, "https:/" "/")) {
         /* actor search: find a user with this actor */
         xs *l = xs_split(resource, "/");
         char *uid = xs_list_get(l, -1);
@@ -173,6 +172,7 @@ int webfinger_get_handler(xs_dict *req, char *q_path,
         /* build the object */
         xs *acct;
         xs *aaj   = xs_dict_new();
+        xs *prof  = xs_dict_new();
         xs *links = xs_list_new();
         xs *obj   = xs_dict_new();
 
@@ -184,6 +184,12 @@ int webfinger_get_handler(xs_dict *req, char *q_path,
         aaj = xs_dict_append(aaj, "href", snac.actor);
 
         links = xs_list_append(links, aaj);
+
+        prof = xs_dict_append(prof, "rel", "http://webfinger.net/rel/profile-page");
+        prof = xs_dict_append(prof, "type", "text/html");
+        prof = xs_dict_append(prof, "href", snac.actor);
+
+        links = xs_list_append(links, prof);
 
         char *avatar = xs_dict_get(snac.config, "avatar");
         if (!xs_is_null(avatar) && *avatar) {

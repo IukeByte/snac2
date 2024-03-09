@@ -54,6 +54,7 @@ void _xs_destroy(char **var);
 xstype xs_type(const xs_val *data);
 int xs_size(const xs_val *data);
 int xs_is_null(const xs_val *data);
+int xs_cmp(const xs_val *v1, const xs_val *v2);
 xs_val *xs_dup(const xs_val *data);
 xs_val *xs_expand(xs_val *data, int offset, int size);
 xs_val *xs_collapse(xs_val *data, int offset, int size);
@@ -85,13 +86,13 @@ xs_str *xs_tolower_i(xs_str *str);
 
 xs_list *xs_list_new(void);
 xs_list *xs_list_append_m(xs_list *list, const char *mem, int dsz);
-#define xs_list_append(list, data) xs_list_append_m(list, data, xs_size(data))
+xs_list *_xs_list_append(xs_list *list, const xs_val *vals[]);
+#define xs_list_append(list, ...) _xs_list_append(list, (const xs_val *[]){ __VA_ARGS__, NULL })
 int xs_list_iter(xs_list **list, xs_val **value);
 int xs_list_len(const xs_list *list);
 xs_val *xs_list_get(const xs_list *list, int num);
 xs_list *xs_list_del(xs_list *list, int num);
 xs_list *xs_list_insert(xs_list *list, int num, const xs_val *data);
-xs_list *xs_list_insert_sorted(xs_list *list, const char *str);
 xs_list *xs_list_set(xs_list *list, int num, const xs_val *data);
 xs_list *xs_list_dequeue(xs_list *list, xs_val **data, int last);
 #define xs_list_pop(list, data) xs_list_dequeue(list, data, 1)
@@ -108,7 +109,9 @@ xs_dict *xs_dict_append_m(xs_dict *dict, const xs_str *key, const xs_val *mem, i
 xs_dict *xs_dict_prepend_m(xs_dict *dict, const xs_str *key, const xs_val *mem, int dsz);
 #define xs_dict_prepend(dict, key, data) xs_dict_prepend_m(dict, key, data, xs_size(data))
 int xs_dict_iter(xs_dict **dict, xs_str **key, xs_val **value);
-xs_val *xs_dict_get(const xs_dict *dict, const xs_str *key);
+int xs_dict_next(const xs_dict *dict, xs_str **key, xs_val **value, int *ctxt);
+xs_val *xs_dict_get_def(const xs_dict *dict, const xs_str *key, const xs_val *def);
+#define xs_dict_get(dict, key) xs_dict_get_def(dict, key, NULL)
 xs_dict *xs_dict_del(xs_dict *dict, const xs_str *key);
 xs_dict *xs_dict_set(xs_dict *dict, const xs_str *key, const xs_val *data);
 
@@ -152,8 +155,15 @@ xs_val xs_stock_true[]  = { XSTYPE_TRUE };
 xs_val xs_stock_false[] = { XSTYPE_FALSE };
 xs_val xs_stock_0[]     = { XSTYPE_NUMBER, '0', '\0' };
 xs_val xs_stock_1[]     = { XSTYPE_NUMBER, '1', '\0' };
+
+#if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
 xs_val xs_stock_list[]  = { XSTYPE_LIST, 0, 0, 0, 1 + _XS_TYPE_SIZE + 1, XSTYPE_EOM };
 xs_val xs_stock_dict[]  = { XSTYPE_DICT, 0, 0, 0, 1 + _XS_TYPE_SIZE + 1, XSTYPE_EOM };
+#else
+xs_val xs_stock_list[]  = { XSTYPE_LIST, 1 + _XS_TYPE_SIZE + 1, 0, 0, 0, XSTYPE_EOM };
+xs_val xs_stock_dict[]  = { XSTYPE_DICT, 1 + _XS_TYPE_SIZE + 1, 0, 0, 0, XSTYPE_EOM };
+#endif
+
 
 void *_xs_realloc(void *ptr, size_t size, const char *file, int line, const char *func)
 {
@@ -272,21 +282,16 @@ xstype xs_type(const xs_val *data)
 void _xs_put_size(xs_val *ptr, int i)
 /* must match _XS_TYPE_SIZE */
 {
-    unsigned char *p = (unsigned char *)ptr;
-
-    p[0] = (i >> 24) & 0x7f;
-    p[1] = (i >> 16) & 0xff;
-    p[2] = (i >> 8) & 0xff;
-    p[3] = i & 0xff;
+    memcpy(ptr, &i, sizeof(i));
 }
 
 
 int _xs_get_size(const xs_val *ptr)
 /* must match _XS_TYPE_SIZE */
 {
-    unsigned char *p = (unsigned char *)ptr;
-
-    return (p[0] << 24) | (p[1] << 16) | (p[2] << 8) | p[3];
+    int i;
+    memcpy(&i, ptr, sizeof(i));
+    return i;
 }
 
 
@@ -347,6 +352,17 @@ int xs_is_null(const xs_val *data)
 /* checks for null */
 {
     return (xs_type(data) == XSTYPE_NULL);
+}
+
+
+int xs_cmp(const xs_val *v1, const xs_val *v2)
+/* compares two values */
+{
+    int s1 = xs_size(v1);
+    int s2 = xs_size(v2);
+    int d = s1 - s2;
+
+    return d == 0 ? memcmp(v1, v2, s1) : d;
 }
 
 
@@ -666,6 +682,22 @@ xs_list *xs_list_append_m(xs_list *list, const char *mem, int dsz)
 }
 
 
+xs_list *_xs_list_append(xs_list *list, const xs_val *vals[])
+/* adds several values to the list */
+{
+    /* special case: if the first argument is NULL, just insert it */
+    if (*vals == NULL)
+        return xs_list_append_m(list, NULL, 0);
+
+    while (*vals) {
+        list = xs_list_append_m(list, *vals, xs_size(*vals));
+        vals++;
+    }
+
+    return list;
+}
+
+
 int xs_list_iter(xs_list **list, xs_val **value)
 /* iterates a list value */
 {
@@ -764,28 +796,6 @@ xs_list *xs_list_insert(xs_list *list, int num, const xs_val *data)
         offset = xs_size(list);
 
     return _xs_list_write_litem(list, offset - 1, data, xs_size(data));
-}
-
-
-xs_list *xs_list_insert_sorted(xs_list *list, const xs_str *str)
-/* inserts a string in the list in its ordered position */
-{
-    XS_ASSERT_TYPE(list, XSTYPE_LIST);
-    XS_ASSERT_TYPE(str, XSTYPE_STRING);
-
-    char *p, *v;
-    int offset = xs_size(list);
-
-    p = list;
-    while (xs_list_iter(&p, &v)) {
-        /* if this element is greater or equal, insert here */
-        if (strcmp(v, str) >= 0) {
-            offset = v - list;
-            break;
-        }
-    }
-
-    return _xs_list_write_litem(list, offset - 1, str, xs_size(str));
 }
 
 
@@ -1015,22 +1025,60 @@ int xs_dict_iter(xs_dict **dict, xs_str **key, xs_val **value)
 }
 
 
-xs_val *xs_dict_get(const xs_dict *dict, const xs_str *key)
-/* returns the value directed by key */
+int xs_dict_next(const xs_dict *dict, xs_str **key, xs_val **value, int *ctxt)
+/* iterates a dict, with context */
+{
+    if (xs_type(dict) != XSTYPE_DICT)
+        return 0;
+
+    int goon = 1;
+
+    char *p = (char *)dict;
+
+    /* skip the start of the list */
+    if (*ctxt == 0)
+        *ctxt = 1 + _XS_TYPE_SIZE;
+
+    p += *ctxt;
+
+    /* an element? */
+    if (xs_type(p) == XSTYPE_DITEM) {
+        p++;
+
+        *key = p;
+        p += xs_size(*key);
+
+        *value = p;
+        p += xs_size(*value);
+    }
+    else {
+        /* end of list */
+        goon = 0;
+    }
+
+    /* store back the pointer */
+    *ctxt = p - dict;
+
+    return goon;
+}
+
+
+xs_val *xs_dict_get_def(const xs_dict *dict, const xs_str *key, const xs_val *def)
+/* returns the value directed by key, or the default value */
 {
     XS_ASSERT_TYPE(dict, XSTYPE_DICT);
     XS_ASSERT_TYPE(key, XSTYPE_STRING);
 
-    xs_dict *p = (xs_dict *)dict;
     xs_str *k;
     xs_val *v;
+    int c = 0;
 
-    while (xs_dict_iter(&p, &k, &v)) {
+    while (xs_dict_next(dict, &k, &v, &c)) {
         if (strcmp(k, key) == 0)
             return v;
     }
 
-    return NULL;
+    return (xs_val *)def;
 }
 
 
@@ -1042,9 +1090,9 @@ xs_dict *xs_dict_del(xs_dict *dict, const xs_str *key)
 
     xs_str *k;
     xs_val *v;
-    xs_dict *p = dict;
+    int c = 0;
 
-    while (xs_dict_iter(&p, &k, &v)) {
+    while (xs_dict_next(dict, &k, &v, &c)) {
         if (strcmp(k, key) == 0) {
             /* the address of the item is just behind the key */
             char *i = k - 1;

@@ -6,8 +6,6 @@ Unfollowing lemmy groups gets rejected with an http status of 400.
 
 Unfollowing guppe groups seems to work (http status of 200), but messages continue to arrive as if it didn't.
 
-Fix duplicate mentions, see https://codeberg.org/grunfink/snac2/issues/115
-
 Post edits should preserve the image and the image description somewhat.
 
 Mastodon API: fix whatever the fuck is making the official app and Megalodon to crash.
@@ -20,7 +18,11 @@ Integrate "Ability to federate with hidden networks" see https://codeberg.org/gr
 
 Integrate "Added handling for International Domain Names" PR https://codeberg.org/grunfink/snac2/pulls/104
 
-Change HTML metadata information to the post info instead of user info, see https://codeberg.org/grunfink/snac2/issues/116
+Consider discarding posts by content using string or regex to mitigate spam.
+
+Consider adding milter-like support to reject posts to mitigate spam.
+
+Do something about Akkoma and Misskey's quoted replies (they use the `quoteUrl` field instead of `inReplyTo`).
 
 Add more CSS classes according to https://comam.es/snac/grunfink/p/1705598619.090050
 
@@ -295,3 +297,13 @@ Fix case-sensitivity issue described in https://codeberg.org/grunfink/snac2/issu
 Implement real tag links instead of just pretending that it's something that exists  (2023-11-18T22:42:48+0100).
 
 Add a flag to make accounts private, i.e., they don't expose any content from the web interface (only through ActivityPub) (2023-11-18T22:42:48+0100).
+
+Fix duplicate mentions, see https://codeberg.org/grunfink/snac2/issues/115 (2024-02-14T09:51:01+0100).
+
+Change HTML metadata information to the post info instead of user info, see https://codeberg.org/grunfink/snac2/issues/116 (2024-02-14T09:51:22+0100).
+
+Add support for rel="me" links, see https://codeberg.org/grunfink/snac2/issues/124 and https://streetpass.social (2024-02-22T12:40:58+0100).
+
+Hide followers-only replies to unknown accounts, see https://codeberg.org/grunfink/snac2/issues/123 (2024-02-22T12:40:58+0100).
+
+Consider implementing the rejection of activities from recently-created accounts to mitigate spam, see https://akkoma.dev/AkkomaGang/akkoma/src/branch/develop/lib/pleroma/web/activity_pub/mrf/reject_newly_created_account_note_policy.ex (2024-02-24T07:46:10+0100).

@@ -40,8 +40,7 @@ int usage(void)
     printf("unblock {basedir} {instance_url}    Unblocks a full instance\n");
     printf("limit {basedir} {uid} {actor}       Limits an actor (drops their announces)\n");
     printf("unlimit {basedir} {uid} {actor}     Unlimits an actor\n");
-
-/*    printf("question {basedir} {uid} 'opts'  Generates a poll (;-separated opts)\n");*/
+    printf("verify_links {basedir} {uid}        Verifies a user's links (in the metadata)\n");
 
     return 1;
 }
@@ -57,16 +56,6 @@ char *get_argv(int *argi, int argc, char *argv[])
 
 
 #define GET_ARGV() get_argv(&argi, argc, argv)
-
-#include "xs_html.h"
-
-xs_html *html_note(snac *user, char *summary,
-                   char *div_id, char *form_id,
-                   char *ta_plh, char *ta_content,
-                   char *edit_id, char *actor_id,
-                   xs_val *cw_yn, char *cw_text,
-                   xs_val *mnt_only, char *redir,
-                   char *in_reply_to, int poll);
 
 int main(int argc, char *argv[])
 {
@@ -244,6 +233,11 @@ int main(int argc, char *argv[])
 
     if (strcmp(cmd, "queue") == 0) { /** **/
         process_user_queue(&snac);
+        return 0;
+    }
+
+    if (strcmp(cmd, "verify_links") == 0) { /** **/
+        verify_links(&snac);
         return 0;
     }
 

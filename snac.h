@@ -1,7 +1,7 @@
 /* snac - A simple, minimalistic ActivityPub instance */
 /* copyright (c) 2022 - 2024 grunfink et al. / MIT license */
 
-#define VERSION "2.46"
+#define VERSION "2.50-dev"
 
 #define USER_AGENT "snac/" VERSION
 
@@ -14,6 +14,10 @@
 
 #ifndef MAX_THREADS
 #define MAX_THREADS 256
+#endif
+
+#ifndef MAX_CONVERSATION_LEVELS
+#define MAX_CONVERSATION_LEVELS 48
 #endif
 
 extern double disk_layout;
@@ -41,6 +45,7 @@ typedef struct {
     xs_dict *config;    /* user configuration */
     xs_dict *config_o;  /* user configuration admin override */
     xs_dict *key;       /* keypair */
+    xs_dict *links;     /* validated links */
     xs_str *actor;      /* actor url */
     xs_str *md5;        /* actor url md5 */
 } snac;
@@ -132,7 +137,7 @@ int timeline_del(snac *snac, char *id);
 xs_list *timeline_simple_list(snac *snac, const char *idx_name, int skip, int show);
 xs_list *timeline_list(snac *snac, const char *idx_name, int skip, int show);
 int timeline_add(snac *snac, const char *id, const xs_dict *o_msg);
-void timeline_admire(snac *snac, const char *id, const char *admirer, int like);
+int timeline_admire(snac *snac, const char *id, const char *admirer, int like);
 
 xs_list *timeline_top_level(snac *snac, xs_list *list);
 xs_list *local_list(snac *snac, int max);
@@ -187,7 +192,8 @@ xs_str *notify_check_time(snac *snac, int reset);
 void notify_add(snac *snac, const char *type, const char *utype,
                 const char *actor, const char *objid);
 xs_dict *notify_get(snac *snac, const char *id);
-xs_list *notify_list(snac *snac, int new_only);
+int notify_new_num(snac *snac);
+xs_list *notify_list(snac *snac, int skip, int show);
 void notify_clear(snac *snac);
 
 void inbox_add(const char *inbox);
@@ -209,6 +215,7 @@ void enqueue_telegram(const xs_str *msg, const char *bot, const char *chat_id);
 void enqueue_ntfy(const xs_str *msg, const char *ntfy_server, const char *ntfy_token);
 void enqueue_message(snac *snac, const xs_dict *msg);
 void enqueue_close_question(snac *user, const char *id, int end_secs);
+void enqueue_verify_links(snac *user);
 void enqueue_request_replies(snac *user, const char *id);
 int was_question_voted(snac *user, const char *id);
 
@@ -276,6 +283,7 @@ xs_str *get_actor_inbox(const char *actor);
 int send_to_actor(snac *snac, const char *actor, const xs_dict *msg,
                   xs_val **payload, int *p_size, int timeout);
 int is_msg_public(const xs_dict *msg);
+int is_msg_from_private_user(const xs_dict *msg);
 int is_msg_for_me(snac *snac, const xs_dict *msg);
 
 int process_user_queue(snac *snac);
@@ -292,8 +300,9 @@ xs_str *not_really_markdown(const char *content, xs_list **attach);
 xs_str *sanitize(const char *content);
 xs_str *encode_html(const char *str);
 
-xs_str *html_timeline(snac *user, const xs_list *list, int local,
-                      int skip, int show, int show_more, char *tag);
+xs_str *html_timeline(snac *user, const xs_list *list, int read_only,
+                      int skip, int show, int show_more,
+                      char *tag, char *page, int utl);
 
 int html_get_handler(const xs_dict *req, const char *q_path,
                      char **body, int *b_size, char **ctype, xs_str **etag);
@@ -327,3 +336,5 @@ int mastoapi_put_handler(const xs_dict *req, const char *q_path,
                           const char *payload, int p_size,
                           char **body, int *b_size, char **ctype);
 void mastoapi_purge(void);
+
+void verify_links(snac *user);

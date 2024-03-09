@@ -156,7 +156,7 @@ const char *login_page = ""
 "</head>\n"
 "<body><h1>%s OAuth identify</h1>\n"
 "<div style=\"background-color: red; color: white\">%s</div>\n"
-"<form method=\"post\" action=\"http:/" "/%s/%s\">\n"
+"<form method=\"post\" action=\"https:/" "/%s/%s\">\n"
 "<p>Login: <input type=\"text\" name=\"login\"></p>\n"
 "<p>Password: <input type=\"password\" name=\"passwd\"></p>\n"
 "<input type=\"hidden\" name=\"redir\" value=\"%s\">\n"
@@ -622,6 +622,22 @@ xs_dict *mastoapi_account(const xs_dict *actor)
     p = xs_dict_get(actor, "attachment");
     xs_dict *v;
 
+    /* dict of validated links */
+    xs_dict *val_links = NULL;
+    xs_dict *metadata  = xs_stock_dict;
+    snac user = {0};
+
+    if (xs_startswith(id, srv_baseurl)) {
+        /* if it's a local user, open it and pick its validated links */
+        if (user_open(&user, prefu)) {
+            val_links = user.links;
+            metadata  = xs_dict_get_def(user.config, "metadata", xs_stock_dict);
+        }
+    }
+
+    if (xs_is_null(val_links))
+        val_links = xs_stock_dict;
+
     while (xs_list_iter(&p, &v)) {
         char *type  = xs_dict_get(v, "type");
         char *name  = xs_dict_get(v, "name");
@@ -629,15 +645,33 @@ xs_dict *mastoapi_account(const xs_dict *actor)
 
         if (!xs_is_null(type) && !xs_is_null(name) &&
             !xs_is_null(value) && strcmp(type, "PropertyValue") == 0) {
+            xs *val_date = NULL;
+
+            char *url = xs_dict_get(metadata, name);
+
+            if (!xs_is_null(url) && xs_startswith(url, "https:/" "/")) {
+                xs_number *verified_time = xs_dict_get(val_links, url);
+                if (xs_type(verified_time) == XSTYPE_NUMBER) {
+                    time_t t = xs_number_get(verified_time);
+
+                    if (t > 0)
+                        val_date = xs_str_utctime(t, ISO_DATE_SPEC);
+                }
+            }
+
             xs *d = xs_dict_new();
 
             d = xs_dict_append(d, "name", name);
             d = xs_dict_append(d, "value", value);
-            d = xs_dict_append(d, "verified_at", xs_stock_null);
+            d = xs_dict_append(d, "verified_at",
+                xs_type(val_date) == XSTYPE_STRING && *val_date ?
+                    val_date : xs_stock_null);
 
             fields = xs_list_append(fields, d);
         }
     }
+
+    user_free(&user);
 
     acct = xs_dict_append(acct, "fields", fields);
 
@@ -1134,12 +1168,29 @@ int mastoapi_get_handler(const xs_dict *req, const char *q_path,
                 xs_str *k;
                 xs_str *v;
 
-                while (xs_dict_iter(&metadata, &k, &v)) {
+                xs_dict *val_links = snac1.links;
+                if (xs_is_null(val_links))
+                    val_links = xs_stock_dict;
+
+                int c = 0;
+                while (xs_dict_next(metadata, &k, &v, &c)) {
+                    xs *val_date = NULL;
+
+                    xs_number *verified_time = xs_dict_get(val_links, v);
+                    if (xs_type(verified_time) == XSTYPE_NUMBER) {
+                        time_t t = xs_number_get(verified_time);
+
+                        if (t > 0)
+                            val_date = xs_str_utctime(t, ISO_DATE_SPEC);
+                    }
+
                     xs *d = xs_dict_new();
 
                     d = xs_dict_append(d, "name", k);
                     d = xs_dict_append(d, "value", v);
-                    d = xs_dict_append(d, "verified_at", xs_stock_null);
+                    d = xs_dict_append(d, "verified_at",
+                        xs_type(val_date) == XSTYPE_STRING && *val_date ?
+                            val_date : xs_stock_null);
 
                     fields = xs_list_append(fields, d);
                 }
@@ -1412,7 +1463,7 @@ int mastoapi_get_handler(const xs_dict *req, const char *q_path,
                 /* discard non-Notes */
                 const char *id   = xs_dict_get(msg, "id");
                 const char *type = xs_dict_get(msg, "type");
-                if (!xs_match(type, "Note|Question|Page|Article"))
+                if (!xs_match(type, "Note|Question|Page|Article|Video"))
                     continue;
 
                 const char *from = NULL;
@@ -1442,8 +1493,9 @@ int mastoapi_get_handler(const xs_dict *req, const char *q_path,
                 if (is_hidden(&snac1, id))
                     continue;
 
-                /* discard poll votes (they have a name) */
-                if (strcmp(type, "Page") != 0 && !xs_is_null(xs_dict_get(msg, "name")))
+                /* if it has a name and it's not a Page or a Video,
+                   it's a poll vote, so discard it */
+                if (!xs_is_null(xs_dict_get(msg, "name")) && !xs_match(type, "Page|Video"))
                     continue;
 
                 /* convert the Note into a Mastodon status */
@@ -1500,27 +1552,61 @@ int mastoapi_get_handler(const xs_dict *req, const char *q_path,
             if (strcmp(type, "Note") != 0 && strcmp(type, "Question") != 0)
                 continue;
 
-            /* discard private users */
-            {
-                const char *atto = get_atto(msg);
-                xs *l = xs_split(atto, "/");
-                const char *uid = xs_list_get(l, -1);
-                snac p_user;
-                int skip = 1;
-
-                if (uid && user_open(&p_user, uid)) {
-                    if (xs_type(xs_dict_get(p_user.config, "private")) != XSTYPE_TRUE)
-                        skip = 0;
-
-                    user_free(&p_user);
-                }
-
-                if (skip)
-                    continue;
-            }
+            /* discard messages from private users */
+            if (is_msg_from_private_user(msg))
+                continue;
 
             /* convert the Note into a Mastodon status */
             xs *st = mastoapi_status(user, msg);
+
+            if (st != NULL) {
+                out = xs_list_append(out, st);
+                cnt++;
+            }
+        }
+
+        *body  = xs_json_dumps(out, 4);
+        *ctype = "application/json";
+        status = 200;
+    }
+    else
+    if (xs_startswith(cmd, "/v1/timelines/tag/")) { /** **/
+        const char *limit_s = xs_dict_get(args, "limit");
+        int limit = 0;
+        int cnt   = 0;
+
+        if (!xs_is_null(limit_s))
+            limit = atoi(limit_s);
+
+        if (limit == 0)
+            limit = 20;
+
+        /* get the tag */
+        xs *l = xs_split(cmd, "/");
+        char *tag = xs_list_get(l, -1);
+
+        xs *timeline = tag_search(tag, 0, limit);
+        xs *out      = xs_list_new();
+        xs_list *p   = timeline;
+        xs_str *md5;
+
+        while (xs_list_iter(&p, &md5) && cnt < limit) {
+            xs *msg = NULL;
+
+            /* get the entry */
+            if (!valid_status(object_get_by_md5(md5, &msg)))
+                continue;
+
+            /* skip non-public messages */
+            if (!is_msg_public(msg))
+                continue;
+
+            /* discard messages from private users */
+            if (is_msg_from_private_user(msg))
+                continue;
+
+            /* convert the Note into a Mastodon status */
+            xs *st = mastoapi_status(NULL, msg);
 
             if (st != NULL) {
                 out = xs_list_append(out, st);
@@ -1542,7 +1628,7 @@ int mastoapi_get_handler(const xs_dict *req, const char *q_path,
     else
     if (strcmp(cmd, "/v1/notifications") == 0) { /** **/
         if (logged_in) {
-            xs *l      = notify_list(&snac1, 0);
+            xs *l      = notify_list(&snac1, 0, 64);
             xs *out    = xs_list_new();
             xs_list *p = l;
             xs_dict *v;
@@ -1716,7 +1802,11 @@ int mastoapi_get_handler(const xs_dict *req, const char *q_path,
         xs *l1 = xs_list_append(xs_list_new(), "en");
         ins = xs_dict_append(ins, "languages", l1);
 
-        ins = xs_dict_append(ins, "urls", xs_stock_dict);
+        xs *wss = xs_fmt("wss:/" "/%s", xs_dict_get(srv_config, "host"));
+        xs *urls = xs_dict_new();
+        urls = xs_dict_append(urls, "streaming_api", wss);
+
+        ins = xs_dict_append(ins, "urls", urls);
 
         xs *d2 = xs_dict_append(xs_dict_new(), "user_count", xs_stock_0);
         d2 = xs_dict_append(d2, "status_count", xs_stock_0);
@@ -1946,18 +2036,36 @@ int mastoapi_get_handler(const xs_dict *req, const char *q_path,
                 /* reply something only for offset 0; otherwise,
                    apps like Tusky keep asking again and again */
 
-                if (!xs_is_null(q) && !xs_is_null(type) && strcmp(type, "accounts") == 0) {
-                    /* do a webfinger query */
-                    char *actor = NULL;
-                    char *user  = NULL;
+                if (!xs_is_null(q) && !xs_is_null(type)) {
+                    if (strcmp(type, "accounts") == 0) {
+                        /* do a webfinger query */
+                        char *actor = NULL;
+                        char *user  = NULL;
 
-                    if (valid_status(webfinger_request(q, &actor, &user) && actor)) {
-                        xs *actor_o = NULL;
+                        if (valid_status(webfinger_request(q, &actor, &user)) && actor) {
+                            xs *actor_o = NULL;
 
-                        if (valid_status(actor_request(&snac1, actor, &actor_o))) {
-                            xs *acct = mastoapi_account(actor_o);
+                            if (valid_status(actor_request(&snac1, actor, &actor_o))) {
+                                xs *acct = mastoapi_account(actor_o);
 
-                            acl = xs_list_append(acl, acct);
+                                acl = xs_list_append(acl, acct);
+                            }
+                        }
+                    }
+                    else
+                    if (strcmp(type, "hashtags") == 0) {
+                        /* search this tag */
+                        xs *tl = tag_search((char *)q, 0, 1);
+
+                        if (xs_list_len(tl)) {
+                            xs *d = xs_dict_new();
+
+                            d = xs_dict_append(d, "name", q);
+                            xs *url = xs_fmt("%s?t=%s", srv_baseurl, q);
+                            d = xs_dict_append(d, "url", url);
+                            d = xs_dict_append(d, "history", xs_stock_list);
+
+                            htl = xs_list_append(htl, d);
                         }
                     }
                 }

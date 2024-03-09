@@ -8,6 +8,8 @@
 #include "xs_openssl.h"
 #include "xs_random.h"
 #include "xs_glob.h"
+#include "xs_curl.h"
+#include "xs_regex.h"
 
 #include "snac.h"
 
@@ -24,9 +26,10 @@ static const char *default_srv_config = "{"
     "\"queue_retry_minutes\":  2,"
     "\"queue_retry_max\":      10,"
     "\"cssurls\":              [\"\"],"
-    "\"max_timeline_entries\": 128,"
+    "\"max_timeline_entries\": 50,"
     "\"timeline_purge_days\":  120,"
     "\"local_purge_days\":     0,"
+    "\"min_account_age\":      0,"
     "\"admin_email\":          \"\","
     "\"admin_account\":        \"\","
     "\"title\":                \"\","
@@ -49,7 +52,7 @@ static const char *default_css =
     ".snac-pubdate { color: #a0a0a0; font-size: 90% }\n"
     ".snac-top-controls { padding-bottom: 1.5em }\n"
     ".snac-post { border-top: 1px solid #a0a0a0; }\n"
-    ".snac-children { padding-left: 2em; border-left: 1px solid #a0a0a0; }\n"
+    ".snac-children { padding-left: 1em; border-left: 1px solid #a0a0a0; }\n"
     ".snac-textarea { font-family: inherit; width: 100% }\n"
     ".snac-history { border: 1px solid #606060; border-radius: 3px; margin: 2.5em 0; padding: 0 2em }\n"
     ".snac-btn-mute { float: right; margin-left: 0.5em }\n"
@@ -63,7 +66,7 @@ static const char *default_css =
     ".snac-footer { margin-top: 2em; font-size: 75% }\n"
     ".snac-poll-result { margin-left: auto; margin-right: auto; }\n"
     "@media (prefers-color-scheme: dark) { \n"
-    "  body { background-color: #000; color: #fff; }\n"
+    "  body, input, textarea { background-color: #000; color: #fff; }\n"
     "  a { color: #7799dd }\n"
     "  a:visited { color: #aa99dd }\n"
     "}\n"
@@ -406,4 +409,128 @@ int deluser(snac *user)
     rm_rf(user->basedir);
 
     return ret;
+}
+
+
+void verify_links(snac *user)
+/* verifies a user's links */
+{
+    xs_dict *p = xs_dict_get(user->config, "metadata");
+    char *k, *v;
+    int changed = 0;
+
+    xs *headers = xs_dict_new();
+    headers = xs_dict_append(headers, "accept", "text/html");
+    headers = xs_dict_append(headers, "user-agent", USER_AGENT " (link verify)");
+
+    int c = 0;
+    while (p && xs_dict_next(p, &k, &v, &c)) {
+        /* not an https link? skip */
+        if (!xs_startswith(v, "https:/" "/"))
+            continue;
+
+        int status;
+        xs *req = NULL;
+        xs *payload = NULL;
+        int p_size = 0;
+
+        req = xs_http_request("GET", v, headers, NULL, 0, &status,
+            &payload, &p_size, 0);
+
+        if (!valid_status(status)) {
+            snac_log(user, xs_fmt("link %s verify error %d", v, status));
+            continue;
+        }
+
+        /* extract the links */
+        xs *ls = xs_regex_select(payload, "< *(a|link) +[^>]+>");
+
+        xs_list *lp = ls;
+        char *ll;
+        int vfied = 0;
+
+        while (!vfied && xs_list_iter(&lp, &ll)) {
+            /* extract href and rel */
+            xs *r = xs_regex_select(ll, "(href|rel) *= *(\"[^\"]*\"|'[^']*')");
+
+            /* must have both attributes */
+            if (xs_list_len(r) != 2)
+                continue;
+
+            xs *href = NULL;
+            int is_rel_me = 0;
+            xs_list *pr = r;
+            char *ar;
+
+            while (xs_list_iter(&pr, &ar)) {
+                xs *nq = xs_dup(ar);
+
+                nq = xs_replace_i(nq, "\"", "");
+                nq = xs_replace_i(nq, "'", "");
+
+                xs *r2 = xs_split_n(nq, "=", 1);
+                if (xs_list_len(r2) != 2)
+                    continue;
+
+                xs *ak = xs_strip_i(xs_dup(xs_list_get(r2, 0)));
+                xs *av = xs_strip_i(xs_dup(xs_list_get(r2, 1)));
+
+                if (strcmp(ak, "href") == 0)
+                    href = xs_dup(av);
+                else
+                if (strcmp(ak, "rel") == 0) {
+                    /* split the value by spaces */
+                    xs *vbs = xs_split(av, " ");
+
+                    /* is any of it "me"? */
+                    if (xs_list_in(vbs, "me") != -1)
+                        is_rel_me = 1;
+                }
+            }
+
+            /* after all this acrobatics, do we have an href and a rel="me"? */
+            if (href != NULL && is_rel_me) {
+                /* is it the same as the actor? */
+                if (strcmp(href, user->actor) == 0) {
+                    /* got it! */
+                    xs *verified_time = xs_number_new((double)time(NULL));
+
+                    if (user->links == NULL)
+                        user->links = xs_dict_new();
+
+                    user->links = xs_dict_set(user->links, v, verified_time);
+
+                    vfied = 1;
+                }
+                else
+                    snac_debug(user, 1,
+                        xs_fmt("verify link %s rel='me' found but not related (%s)", v, href));
+            }
+        }
+
+        if (vfied) {
+            changed++;
+            snac_log(user, xs_fmt("link %s verified", v));
+        }
+        else {
+            snac_log(user, xs_fmt("link %s not verified (rel='me' not found)", v));
+        }
+    }
+
+    if (changed) {
+        FILE *f;
+
+        /* update the links.json file */
+        xs *fn = xs_fmt("%s/links.json", user->basedir);
+        xs *bfn = xs_fmt("%s.bak", fn);
+
+        rename(fn, bfn);
+
+        if ((f = fopen(fn, "w")) != NULL) {
+            xs_json_dump(user->links, 4, f);
+            fclose(f);
+        }
+        else
+            rename(bfn, fn);
+    }
 }
