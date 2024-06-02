@@ -365,7 +365,7 @@ int oauth_post_handler(const xs_dict *req, const char *q_path,
             }
         }
 
-        /* no code? 
+        /* no code?
            I'm not sure of the impacts of this right now, but Subway Tooter does not
            provide a code so one must be generated */
         if (xs_is_null(code)){
@@ -1485,7 +1485,7 @@ int mastoapi_get_handler(const xs_dict *req, const char *q_path,
                     }
                     else
                     if (strcmp(opt, "statuses") == 0) {
-                        /* we don't serve statuses of others; return the empty list */ 
+                        /* we don't serve statuses of others; return the empty list */
                         out = xs_list_new();
                     }
                     else
@@ -1505,24 +1505,41 @@ int mastoapi_get_handler(const xs_dict *req, const char *q_path,
         }
     }
     else
-    if (strcmp(cmd, "/v1/timelines/home") == 0) { /** **/
-        /* the private timeline */
-        if (logged_in) {
-            const char *max_id   = xs_dict_get(args, "max_id");
-            const char *since_id = xs_dict_get(args, "since_id");
-            const char *min_id   = xs_dict_get(args, "min_id");
-            const char *limit_s  = xs_dict_get(args, "limit");
-            int limit = 0;
-            int cnt   = 0;
+    if (xs_startswith(cmd, "/v1/timelines/")) {
+        xs_list *path = xs_split(cmd+14, "/");
 
-            if (!xs_is_null(limit_s))
-                limit = atoi(limit_s);
+        /* common to all timeline endpoints */
+        const char *max_id   = xs_dict_get(args, "max_id");
+        const char *since_id = xs_dict_get(args, "since_id");
+        const char *min_id   = xs_dict_get(args, "min_id"); 
+        const char *limit_s  = xs_dict_get(args, "limit");
 
-            if (limit == 0)
-                limit = 20;
+        if (since_id != NULL && (max_id != NULL || min_id != NULL)) {
+            /* this makes no sense */
+            status = HTTP_STATUS_BAD_REQUEST;
+            goto timeline_finish;
+        }
 
             xs *timeline = timeline_simple_list(&snac1, "private", 0, 2048);
 
+        int limit = 0;
+        if (!xs_is_null(limit_s))
+            limit = atoi(limit_s);
+
+        if (limit <= 0)
+            limit = 20;
+        else if (limit > 40)
+            limit = 40;
+
+        if (xs_list_len(path) == 1 && strcmp(xs_list_get(path, 0), "home") == 0) {
+            /* the private timeline */
+            if (!logged_in) {
+                status = HTTP_STATUS_UNAUTHORIZED;
+                goto timeline_finish;
+            }
+
+            int cnt   = 0;
+            xs *timeline = timeline_simple_list(&snac1, "private", 0, 2048);
             xs *out      = xs_list_new();
             xs_list *p   = timeline;
             const xs_str *v;
@@ -1602,121 +1619,103 @@ int mastoapi_get_handler(const xs_dict *req, const char *q_path,
                 cnt++;
             }
 
+            srv_debug(2, xs_fmt("mastoapi timeline: returned %d entries", xs_list_len(out)));
+
             *body  = xs_json_dumps(out, 4);
             *ctype = "application/json";
             status = HTTP_STATUS_OK;
-
-            srv_debug(2, xs_fmt("mastoapi timeline: returned %d entries", xs_list_len(out)));
         }
-        else {
-            status = HTTP_STATUS_UNAUTHORIZED;
-        }
-    }
-    else
+        else
+        if (xs_list_len(path) == 1 && strcmp(xs_list_get(path, 0), "public") == 0) { /** **/
+            /* the instance public timeline (public timelines for all users) */
+            int cnt   = 0;
+            xs *timeline = timeline_instance_list(0, limit);
     if (strcmp(cmd, "/v1/timelines/public") == 0) { /** **/
-        /* the instance public timeline (public timelines for all users) */
+            xs *out      = xs_list_new();
+            xs_list *p   = timeline;
+            const xs_str *md5;
 
-        const char *limit_s = xs_dict_get(args, "limit");
-        int limit = 0;
-        int cnt   = 0;
+            snac *user = NULL;
+            if (logged_in)
+                user = &snac1;
 
-        if (!xs_is_null(limit_s))
-            limit = atoi(limit_s);
+            while (xs_list_iter(&p, &md5) && cnt < limit) {
+                xs *msg = NULL;
 
-        if (limit == 0)
-            limit = 20;
+                /* get the entry */
+                if (!valid_status(object_get_by_md5(md5, &msg)))
+                    continue;
 
-        xs *timeline = timeline_instance_list(0, limit);
-        xs *out      = xs_list_new();
-        xs_list *p   = timeline;
-        const xs_str *md5;
+                /* discard non-Notes */
+                const char *type = xs_dict_get(msg, "type");
+                if (strcmp(type, "Note") != 0 && strcmp(type, "Question") != 0)
+                    continue;
 
-        snac *user = NULL;
-        if (logged_in)
-            user = &snac1;
+                /* discard messages from private users */
+                if (is_msg_from_private_user(msg))
+                    continue;
 
-        while (xs_list_iter(&p, &md5) && cnt < limit) {
-            xs *msg = NULL;
+                /* convert the Note into a Mastodon status */
+                xs *st = mastoapi_status(user, msg);
 
-            /* get the entry */
-            if (!valid_status(object_get_by_md5(md5, &msg)))
-                continue;
-
-            /* discard non-Notes */
-            const char *type = xs_dict_get(msg, "type");
-            if (strcmp(type, "Note") != 0 && strcmp(type, "Question") != 0)
-                continue;
-
-            /* discard messages from private users */
-            if (is_msg_from_private_user(msg))
-                continue;
-
-            /* convert the Note into a Mastodon status */
-            xs *st = mastoapi_status(user, msg);
-
-            if (st != NULL) {
-                out = xs_list_append(out, st);
-                cnt++;
+                if (st != NULL) {
+                    out = xs_list_append(out, st);
+                    cnt++;
+                }
             }
+
+            *body  = xs_json_dumps(out, 4);
+            *ctype = "application/json";
+            status = HTTP_STATUS_OK;
         }
+        else
+        if (xs_list_len(path) > 1 && strcmp(xs_list_get(path, 0), "tag") == 0) { /** **/
+            /* get the tag timeline, always public */
+            int cnt   = 0;
+            xs *l = xs_split(cmd, "/");
+            const char *tag = xs_list_get(l, -1);
 
-        *body  = xs_json_dumps(out, 4);
-        *ctype = "application/json";
-        status = HTTP_STATUS_OK;
-    }
-    else
-    if (xs_startswith(cmd, "/v1/timelines/tag/")) { /** **/
-        const char *limit_s = xs_dict_get(args, "limit");
-        int limit = 0;
-        int cnt   = 0;
+            xs *timeline = tag_search(tag, 0, limit);
+            xs *out      = xs_list_new();
+            xs_list *p   = timeline;
+            const xs_str *md5;
 
-        if (!xs_is_null(limit_s))
-            limit = atoi(limit_s);
+            while (xs_list_iter(&p, &md5) && cnt < limit) {
+                xs *msg = NULL;
 
-        if (limit == 0)
-            limit = 20;
+                /* get the entry */
+                if (!valid_status(object_get_by_md5(md5, &msg)))
+                    continue;
 
-        /* get the tag */
-        xs *l = xs_split(cmd, "/");
-        const char *tag = xs_list_get(l, -1);
+                /* skip non-public messages */
+                if (!is_msg_public(msg))
+                    continue;
 
-        xs *timeline = tag_search(tag, 0, limit);
-        xs *out      = xs_list_new();
-        xs_list *p   = timeline;
-        const xs_str *md5;
+                /* discard messages from private users */
+                if (is_msg_from_private_user(msg))
+                    continue;
 
-        while (xs_list_iter(&p, &md5) && cnt < limit) {
-            xs *msg = NULL;
+                /* convert the Note into a Mastodon status */
+                xs *st = mastoapi_status(NULL, msg);
 
-            /* get the entry */
-            if (!valid_status(object_get_by_md5(md5, &msg)))
-                continue;
-
-            /* skip non-public messages */
-            if (!is_msg_public(msg))
-                continue;
-
-            /* discard messages from private users */
-            if (is_msg_from_private_user(msg))
-                continue;
-
-            /* convert the Note into a Mastodon status */
-            xs *st = mastoapi_status(NULL, msg);
-
-            if (st != NULL) {
-                out = xs_list_append(out, st);
-                cnt++;
+                if (st != NULL) {
+                    out = xs_list_append(out, st);
+                    cnt++;
+                }
             }
-        }
 
-        *body  = xs_json_dumps(out, 4);
-        *ctype = "application/json";
-        status = HTTP_STATUS_OK;
-    }
-    else
-    if (xs_startswith(cmd, "/v1/timelines/list/")) { /** **/
-        /* get the list id */
-        if (logged_in) {
+            *body  = xs_json_dumps(out, 4);
+            *ctype = "application/json";
+            status = HTTP_STATUS_OK;
+        }
+        else
+        if (xs_list_len(path) > 1 && strcmp(xs_list_get(path, 0), "list") == 0) { /** **/
+            /* get the list id */
+            if (!logged_in) {
+                status = HTTP_STATUS_MISDIRECTED_REQUEST;
+                goto timeline_finish;
+            }
+
             xs *l = xs_split(cmd, "/");
             const char *list = xs_list_get(l, -1);
 
@@ -1781,9 +1780,9 @@ int mastoapi_get_handler(const xs_dict *req, const char *q_path,
             *ctype = "application/json";
             status = HTTP_STATUS_OK;
         }
-        else
-            status = HTTP_STATUS_MISDIRECTED_REQUEST;
-    }
+        timeline_finish:
+        ;
+    } /** end of timelines handlers **/
     else
     if (strcmp(cmd, "/v1/conversations") == 0) { /** **/
         /* TBD */
@@ -1881,7 +1880,7 @@ int mastoapi_get_handler(const xs_dict *req, const char *q_path,
     }
     else
     if (strcmp(cmd, "/v2/filters") == 0) { /** **/
-        /* snac will never have filters 
+        /* snac will never have filters
          * but still, without a v2 endpoint a short delay is introduced
          * in some apps */
         *body  = xs_dup("[]");
