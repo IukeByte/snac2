@@ -72,7 +72,7 @@ void snac_log(snac *user, xs_str *str);
 int srv_open(const char *basedir, int auto_upgrade);
 void srv_free(void);
 
-int user_open(snac *snac, const char *uid);
+int user_open(snac *user, const char *uid);
 void user_free(snac *snac);
 xs_list *user_list(void);
 int user_open_by_md5(snac *snac, const char *md5);
@@ -98,7 +98,7 @@ double f_ctime(const char *fn);
 int index_add_md5(const char *fn, const char *md5);
 int index_add(const char *fn, const char *id);
 int index_gc(const char *fn);
-int index_first(const char *fn, char *buf, int size);
+int index_first(const char *fn, char *line, int size);
 int index_len(const char *fn);
 xs_list *index_list(const char *fn, int max);
 xs_list *index_list_desc(const char *fn, int skip, int show);
@@ -126,7 +126,7 @@ int object_announces_len(const char *id);
 xs_list *object_children(const char *id);
 xs_list *object_likes(const char *id);
 xs_list *object_announces(const char *id);
-int object_parent(const char *id, char *buf, int size);
+int object_parent(const char *md5, char *buf, int size);
 
 int object_user_cache_add(snac *snac, const char *id, const char *cachedir);
 int object_user_cache_del(snac *snac, const char *id, const char *cachedir);
@@ -179,7 +179,7 @@ xs_list *tag_search(const char *tag, int skip, int show);
 
 xs_val *list_maint(snac *user, const char *list, int op);
 xs_list *list_timeline(snac *user, const char *list, int skip, int show);
-xs_val *list_content(snac *user, const char *list_id, const char *actor_md5, int op);
+xs_val *list_content(snac *user, const char *list, const char *actor_md5, int op);
 void list_distribute(snac *user, const char *who, const xs_dict *post);
 
 int actor_add(const char *actor, const xs_dict *msg);
@@ -293,7 +293,7 @@ xs_dict *msg_pong(snac *user, const char *rcpt, const char *object);
 xs_dict *msg_question(snac *user, const char *content, xs_list *attach,
                       const xs_list *opts, int multiple, int end_secs);
 
-int activitypub_request(snac *snac, const char *url, xs_dict **data);
+int activitypub_request(snac *user, const char *url, xs_dict **data);
 int actor_request(snac *user, const char *actor, xs_dict **data);
 int send_to_inbox_raw(const char *keyid, const char *seckey,
                   const xs_str *inbox, const xs_dict *msg,
@@ -305,7 +305,7 @@ int send_to_actor(snac *snac, const char *actor, const xs_dict *msg,
                   xs_val **payload, int *p_size, int timeout);
 int is_msg_public(const xs_dict *msg);
 int is_msg_from_private_user(const xs_dict *msg);
-int is_msg_for_me(snac *snac, const xs_dict *msg);
+int is_msg_for_me(snac *snac, const xs_dict *c_msg);
 
 int process_user_queue(snac *snac);
 void process_queue_item(xs_dict *q_item);
