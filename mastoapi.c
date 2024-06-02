@@ -2390,6 +2390,22 @@ int mastoapi_get_handler(const xs_dict *req, const char *q_path,
         else
             status = HTTP_STATUS_UNAUTHORIZED;
     }
+    else if (xs_startswith(cmd, "/v1/tags/")) {
+        /* get info about a single tag */
+        const char *tag = cmd+9;
+        xs *res = xs_dict_new();
+        res = xs_dict_set(res, "name", tag);
+        xs *url = xs_fmt("%s/?t=%s", srv_baseurl, tag);
+        res = xs_dict_set(res, "url", url);
+
+        /* unsupported */
+        res = xs_dict_set(res, "history", xs_stock(XSTYPE_LIST));
+        res = xs_dict_set(res, "following", xs_stock(XSTYPE_FALSE));
+
+        *body  = xs_json_dumps(res, 4);
+        *ctype = "application/json";
+        status = HTTP_STATUS_OK;
+    }
 
     /* user cleanup */
     if (logged_in)
