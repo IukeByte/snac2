@@ -103,6 +103,25 @@ int index_len(const char *fn);
 xs_list *index_list(const char *fn, int max);
 xs_list *index_list_desc(const char *fn, int skip, int show);
 
+typedef enum iter_dir {
+    ASC,
+    DESC,
+} iter_dir;
+
+typedef struct index_iter_t {
+    FILE        *_f;
+    int         _fetched;
+    iter_dir    _direction;
+    const int   _limit;
+    const char  *_max_id;
+} index_iter_t;
+
+index_iter_t *index_iter_create(const char *fn, const char *since_id, const char *min_id, const char *max_id,
+                                    int limit);
+void index_iter_free(index_iter_t *iter);
+xs_str *index_next(index_iter_t *iter);
+
+
 int object_add(const char *id, const xs_dict *obj);
 int object_add_ow(const char *id, const xs_dict *obj);
 int object_here_by_md5(const char *id);

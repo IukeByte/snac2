@@ -636,6 +636,157 @@ xs_list *index_list_desc(const char *fn, int skip, int show)
 }
 
 
+void _index_iter_seekto(index_iter_t *iter, const char *id)
+/* seek to a certain position in the index */
+{
+    // TODO: We have a problem when the ID is not in the index
+
+    xs *val = NULL;
+    do {
+        val = index_next(iter);
+    } while (val != NULL && strcmp(val, id) != 0);
+}
+
+index_iter_t *index_iter_create(const char *fn, const char *since_id, const char *min_id, const char *max_id,
+                             const int limit)
+/* return an index iterator to be used with index_next, returns NULL in failure case. */
+{
+    if (since_id != NULL && min_id != NULL && max_id != NULL)
+        return NULL;   /* this doesn't make sense */
+
+    FILE *f;
+    index_iter_t iter = {
+        ._f         = NULL,
+        ._fetched   = 0,
+        ._direction = DESC,
+        ._limit     = limit,
+        ._max_id    = NULL,
+    };
+
+    printf("[iter] dir: %s limit: %d\n", iter._direction == ASC ? "ASC" : "DESC", iter._limit);
+
+    if ((f = fopen(fn, "r")) != NULL) {
+        flock(fileno(f), LOCK_SH);
+        iter._f = f;
+    } else {
+        return NULL;
+    }
+
+    index_iter_t *ret = malloc(sizeof(index_iter_t));
+    if (ret == NULL) {
+        srv_debug(0, "index_iter(): out of memory");
+        fclose(iter._f);
+        return NULL;
+    }
+
+    /* determine direction and max_id */
+    const char *start_after = NULL;
+
+    /* none = start at most recent DESC */
+    if (since_id == NULL && min_id == NULL && max_id == NULL) {
+        iter._direction = DESC;
+    }
+    else
+    /* since_id = start at most recent until we hit since_id DESC */
+    if (since_id != NULL) {
+        iter._direction = DESC;
+        iter._max_id = since_id;
+    }
+    else
+    /* min_id + max_id = seek forward until we find min_id, stop at max_id ASC */
+    if (max_id != NULL && min_id != NULL) {
+        iter._direction = ASC;
+        iter._max_id = max_id;
+        start_after = min_id;
+    }
+    else
+    /* min_id = seek forward until we find min_id then ASC */
+    if (min_id != NULL) {
+        iter._direction = ASC;
+        start_after = min_id;
+    }
+    else
+    /* max_id = start at oldest until we hit max_id ASC */
+    if (max_id != NULL) {
+        iter._direction = ASC;
+        iter._max_id = max_id;
+    }
+    else
+        srv_debug(0, "index_iter(): impossible iteration combination");
+
+
+    if (iter._direction == DESC) {
+        if (fseek(f, 0, SEEK_END)) {
+            srv_debug(0, "index_iter(): failed to move index to the end");
+            fclose(iter._f);
+            return NULL;
+        }
+    }
+
+    /* Seek to start position in the direction we already set */
+    if (start_after != NULL)
+        _index_iter_seekto(&iter, start_after);
+
+    return memcpy(ret, &iter, sizeof(index_iter_t));
+}
+
+
+void index_iter_free(index_iter_t *iter)
+/* close index iterator */
+{
+    if (iter == NULL)
+        return;
+
+    if (iter->_f != NULL)
+        fclose(iter->_f);
+
+    free(iter);
+}
+
+
+xs_str *index_next(index_iter_t *iter)
+/* get next element from index or NULL of we reached the end or anything bad happens */
+{
+    if (iter == NULL)
+        return NULL;
+
+    /* have we reached the limit? */
+    if (iter->_limit > 0 && iter->_fetched >= iter->_limit) {
+        return NULL;
+    }
+
+    if (iter->_direction == DESC)
+        if (fseek(iter->_f, 1 * -33, SEEK_CUR))
+            return NULL;
+
+    char line[256];
+
+    /* read next element */
+    if (fgets(line, sizeof(line), iter->_f) != NULL) {
+        if (line[0] != '-') {
+            line[32] = '\0';
+        }
+
+        // TODO: if the id was purged from the index, we will miss it
+        // that's the issue of MD5 values
+
+        /* have we found the max_id? don't return it */
+        if (iter->_max_id != NULL && strcmp(line, iter->_max_id) == 0)
+            return NULL;
+
+        iter->_fetched++;
+
+        if (iter->_direction == DESC)
+            fseek(iter->_f, 1 * -33, SEEK_CUR);
+
+        return xs_str_new(line);
+    }
+
+    /* we have reached the end of the index */
+    return NULL;
+}
+
+
 /** objects **/
 
 static xs_str *_object_fn_by_md5(const char *md5, const char *func)
