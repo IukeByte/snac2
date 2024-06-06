@@ -1,6 +1,9 @@
 /* snac - A simple, minimalistic ActivityPub instance */
 /* copyright (c) 2022 - 2024 grunfink et al. / MIT license */
 
+#ifndef _SNAC_H
+#define _SNAC_H
+
 #define VERSION "2.54-dev"
 
 #define USER_AGENT "snac/" VERSION
@@ -400,3 +403,5 @@ typedef struct {
     char   *text;
 } t_announcement;
 t_announcement *announcement(double after);
+
+#endif /* _SNAC_H */
