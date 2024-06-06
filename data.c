@@ -1828,7 +1828,7 @@ xs_val *list_maint(snac *user, const char *list, int op)
             if (add) {
                 FILE *f;
                 xs *dir = xs_fmt("%s/list/", user->basedir);
-                xs *id  = xs_fmt("%010x", time(NULL));
+                xs_str *id  = xs_fmt("%010x", time(NULL));
 
                 mkdirx(dir);
 
@@ -1839,10 +1839,8 @@ xs_val *list_maint(snac *user, const char *list, int op)
                     fclose(f);
                 }
 
-                l = xs_stock(XSTYPE_TRUE);
+                l = id;
             }
-            else
-                l = xs_stock(XSTYPE_FALSE);
         }
 
         break;
