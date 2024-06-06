@@ -14,6 +14,8 @@
 #define DIR_PERM_ADD 02770
 
 #define ISO_DATE_SPEC "%Y-%m-%dT%H:%M:%SZ"
+#define INDEX_ENTRY_SIZE 32
+#define INDEX_ENTRY_FMT "%-32s"
 
 #ifndef MAX_THREADS
 #define MAX_THREADS 256
@@ -119,10 +121,10 @@ typedef struct index_iterator {
     const char  *_max_id;
 } index_iterator;
 
-index_iterator *index_iter_create(const char *fn, const char *since_id, const char *min_id, const char *max_id,
-                                    int limit);
+index_iterator *index_iter_create(const char *fn, const char *since_id, const char *min_id,
+                                  const char *max_id, int limit);
 void index_iter_free(index_iterator *iter);
-xs_str *index_next(index_iterator *iter);
+_Bool index_next(index_iterator *iter, char *result);
 
 
 int object_add(const char *id, const xs_dict *obj);
@@ -198,6 +200,8 @@ int is_hidden(snac *snac, const char *id);
 
 void tag_index(const char *id, const xs_dict *obj);
 xs_list *tag_search(const char *tag, int skip, int show);
+index_iterator *tag_search_iterator(const char *tag, const char *since_id, const char *min_id,
+                                                     const char *max_id, int limit);
 
 xs_val *list_maint(snac *user, const char *list, int op);
 xs_list *list_timeline(snac *user, const char *list, int skip, int show);

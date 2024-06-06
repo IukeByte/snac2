@@ -20,6 +20,7 @@
 #include <sys/time.h>
 #include <fcntl.h>
 #include <pthread.h>
+#include <stdbool.h>
 
 double disk_layout = 2.7;
 
@@ -373,7 +374,7 @@ double f_ctime(const char *fn)
 
 int is_md5_hex(const char *md5)
 {
-    return xs_is_hex(md5) && strlen(md5) == 32;
+    return xs_is_hex(md5) && strlen(md5) == INDEX_ENTRY_SIZE;
 }
 
 
@@ -433,13 +434,13 @@ int index_del_md5(const char *fn, const char *md5)
         char line[256];
 
         while (fgets(line, sizeof(line), f) != NULL) {
-            line[32] = '\0';
+            line[INDEX_ENTRY_SIZE] = '\0';
 
             if (strcmp(line, md5) == 0) {
                 /* found! just rewind, overwrite it with garbage
                    and an eventual call to index_gc() will clean it
                    [yes: this breaks index_len()] */
-                fseek(f, -33, SEEK_CUR);
+                fseek(f, -INDEX_ENTRY_SIZE-1, SEEK_CUR);
                 fwrite("-", 1, 1, f);
                 status = HTTP_STATUS_OK;
 
@@ -482,7 +483,7 @@ int index_gc(const char *fn)
             gc = 0;
 
             while (fgets(line, sizeof(line), i) != NULL) {
-                line[32] = '\0';
+                line[INDEX_ENTRY_SIZE] = '\0';
 
                 if (line[0] != '-' && object_here_by_md5(line))
                     fprintf(o, "%s\n", line);
@@ -520,7 +521,7 @@ int index_in_md5(const char *fn, const char *md5)
         char line[256];
 
         while (!ret && fgets(line, sizeof(line), f) != NULL) {
-            line[32] = '\0';
+            line[INDEX_ENTRY_SIZE] = '\0';
 
             if (strcmp(line, md5) == 0)
                 ret = 1;
@@ -551,7 +552,7 @@ int index_first(const char *fn, char *line, int size)
         flock(fileno(f), LOCK_SH);
 
         if (fgets(line, size, f) != NULL) {
-            line[32] = '\0';
+            line[INDEX_ENTRY_SIZE] = '\0';
             ret = 1;
         }
 
@@ -569,7 +570,7 @@ int index_len(const char *fn)
     int len = 0;
 
     if (stat(fn, &st) != -1)
-        len = st.st_size / 33;
+        len = st.st_size / (INDEX_ENTRY_SIZE+1);
 
     return len;
 }
@@ -589,7 +590,7 @@ xs_list *index_list(const char *fn, int max)
 
         while (n < max && fgets(line, sizeof(line), f) != NULL) {
             if (line[0] != '-') {
-                line[32] = '\0';
+                line[INDEX_ENTRY_SIZE] = '\0';
                 list = xs_list_append(list, line);
                 n++;
             }
@@ -615,16 +616,16 @@ xs_list *index_list_desc(const char *fn, int skip, int show)
         char line[256];
 
         /* move to the end minus one entry (or more, if skipping entries) */
-        if (!fseek(f, 0, SEEK_END) && !fseek(f, (skip + 1) * -33, SEEK_CUR)) {
+        if (!fseek(f, 0, SEEK_END) && !fseek(f, (skip + 1) * (-INDEX_ENTRY_SIZE-1), SEEK_CUR)) {
             while (n < show && fgets(line, sizeof(line), f) != NULL) {
                 if (line[0] != '-') {
-                    line[32] = '\0';
+                    line[INDEX_ENTRY_SIZE] = '\0';
                     list = xs_list_append(list, line);
                     n++;
                 }
 
                 /* move backwards 2 entries */
-                if (fseek(f, -66, SEEK_CUR) == -1)
+                if (fseek(f, (-INDEX_ENTRY_SIZE-1)*2, SEEK_CUR) == -1)
                     break;
             }
         }
@@ -639,17 +640,18 @@ xs_list *index_list_desc(const char *fn, int skip, int show)
 void _index_iter_seekto(index_iterator *iter, const char *id)
 /* seek to a certain position in the index */
 {
-    // TODO: We have a problem when the ID is not in the index
+    // TODO: when the ID is not in the index
+    // this will seek until the end
 
-    xs *val = NULL;
-    do {
-        val = index_next(iter);
-    } while (val != NULL && strcmp(val, id) != 0);
+    char val[INDEX_ENTRY_SIZE+1] = {0};
+    while (index_next(iter, val) && strcmp(val, id) != 0);
 }
 
 index_iterator *index_iter_create(const char *fn, const char *since_id, const char *min_id, const char *max_id,
-                             const int limit)
-/* return an index iterator to be used with index_next, returns NULL in failure case. */
+                                  const int limit)
+/* return an index iterator to be used with index_next, returns NULL in failure case.
+   if the using function does their own filtering, it should pass a limit of 0 and
+   stop on their own. */
 {
     if (since_id != NULL && min_id != NULL && max_id != NULL)
         return NULL;   /* this doesn't make sense */
@@ -743,46 +745,51 @@ void index_iter_free(index_iterator *iter)
 }
 
 
-xs_str *index_next(index_iterator *iter)
-/* get next element from index or NULL of we reached the end or anything bad happens */
+_Bool index_next(index_iterator *iter, char *result)
+/* get next element from index. Returns false if end of index reached or anything bad happens */
 {
     if (iter == NULL)
-        return NULL;
+        return false;
 
     /* have we reached the limit? */
     if (iter->_limit > 0 && iter->_fetched >= iter->_limit) {
-        return NULL;
+        return false;
     }
 
     if (iter->_direction == DESC)
-        if (fseek(iter->_f, 1 * -33, SEEK_CUR))
-            return NULL;
+        if (fseek(iter->_f, -33, SEEK_CUR))
+            return false; /* end of index */
 
-    char line[256];
+    char line[INDEX_ENTRY_SIZE+2];
+    printf("sizeof line: %zu\n", sizeof(line));
 
     /* read next element */
     if (fgets(line, sizeof(line), iter->_f) != NULL) {
-        if (line[0] != '-') {
-            line[32] = '\0';
+        iter->_fetched++;
+        if (iter->_direction == DESC)
+            fseek(iter->_f, -33, SEEK_CUR);
+
+        /* a deleted entry? try next one */
+        if (line[0] == '-') {
+            return index_next(iter, result);
         }
 
-        // TODO: if the id was purged from the index, we will miss it
+        line[INDEX_ENTRY_SIZE] = '\0';
+
+        // TODO: if one of the specified ids was purged from the index, we will miss it
         // that's the issue of MD5 values
 
         /* have we found the max_id? don't return it */
         if (iter->_max_id != NULL && strcmp(line, iter->_max_id) == 0)
-            return NULL;
+            return false;
 
-        iter->_fetched++;
-
-        if (iter->_direction == DESC)
-            fseek(iter->_f, 1 * -33, SEEK_CUR);
-
-        return xs_str_new(line);
+        if (result)
+            strcpy(result, line);
+        return true;
     }
 
-    /* we have reached the end of the index */
-    return NULL;
+    /* if all goes well, we should never reach this point */
+    return false;
 }
 
 
@@ -1261,7 +1268,7 @@ xs_str *timeline_fn_by_md5(snac *snac, const char *md5)
 {
     xs_str *fn = NULL;
 
-    if (xs_is_hex(md5) && strlen(md5) == 32) {
+    if (xs_is_hex(md5) && strlen(md5) == INDEX_ENTRY_SIZE) {
         fn = xs_fmt("%s/private/%s.json", snac->basedir, md5);
 
         if (mtime(fn) == 0.0) {
@@ -1924,6 +1931,21 @@ xs_list *tag_search(const char *tag, int skip, int show)
     xs *idx    = xs_fmt("%s/tag/%c%c/%s.idx", srv_basedir, md5[0], md5[1], md5);
 
     return index_list_desc(idx, skip, show);
+}
+
+
+index_iterator *tag_search_iterator(const char *tag, const char *since_id, const char *min_id,
+                                              const char *max_id, int limit)
+/* returns the list of posts tagged with tag */
+{
+    if (*tag == '#')
+        tag++;
+
+    xs *lw_tag = xs_tolower_i(xs_dup(tag));
+    xs *md5    = xs_md5_hex(lw_tag, strlen(lw_tag));
+    xs *idx    = xs_fmt("%s/tag/%c%c/%s.idx", srv_basedir, md5[0], md5[1], md5);
+
+    return index_iter_create(idx, since_id, min_id, max_id, limit);
 }
 
 
@@ -2674,7 +2696,7 @@ void notify_add(snac *snac, const char *type, const char *utype,
         pthread_mutex_lock(&data_mutex);
 
         if ((f = fopen(idx, "a")) != NULL) {
-            fprintf(f, "%-32s\n", ntid);
+            fprintf(f, INDEX_ENTRY_FMT "\n", ntid);
             fclose(f);
         }
 
@@ -2726,7 +2748,7 @@ xs_list *notify_list(snac *snac, int skip, int show)
                 char *p = strrchr(v, '.');
                 if (p) {
                     *p = '\0';
-                    fprintf(f, "%-32s\n", v);
+                    fprintf(f, INDEX_ENTRY_FMT "\n", v);
                 }
             }
 
