@@ -20,7 +20,6 @@
 #include <sys/time.h>
 #include <fcntl.h>
 #include <pthread.h>
-#include <stdbool.h>
 
 double disk_layout = 2.7;
 
@@ -636,19 +635,20 @@ xs_list *index_list_desc(const char *fn, int skip, int show)
     return list;
 }
 
+/** index iterator **/
 
 void _index_iter_seekto(index_iterator *iter, const char *id)
 /* seek to a certain position in the index */
 {
-    // TODO: when the ID is not in the index
-    // this will seek until the end
+    // TODO: when the ID is not in the index this will seek until the end
 
     char val[INDEX_ENTRY_SIZE+1] = {0};
     while (index_next(iter, val) && strcmp(val, id) != 0);
 }
 
-index_iterator *index_iter_create(const char *fn, const char *since_id, const char *min_id, const char *max_id,
-                                  const int limit)
+
+index_iterator *index_iter_create(const char *fn, const char *since_id, const char *min_id,
+                                                  const char *max_id, const int limit)
 /* return an index iterator to be used with index_next, returns NULL in failure case.
    if the using function does their own filtering, it should pass a limit of 0 and
    stop on their own. */
@@ -745,23 +745,22 @@ void index_iter_free(index_iterator *iter)
 }
 
 
-_Bool index_next(index_iterator *iter, char *result)
+int index_next(index_iterator *iter, char *result)
 /* get next element from index. Returns false if end of index reached or anything bad happens */
 {
     if (iter == NULL)
-        return false;
+        return 0;
 
     /* have we reached the limit? */
     if (iter->_limit > 0 && iter->_fetched >= iter->_limit) {
-        return false;
+        return 0;
     }
 
     if (iter->_direction == DESC)
         if (fseek(iter->_f, -33, SEEK_CUR))
-            return false; /* end of index */
+            return 0; /* end of index */
 
     char line[INDEX_ENTRY_SIZE+2];
-    printf("sizeof line: %zu\n", sizeof(line));
 
     /* read next element */
     if (fgets(line, sizeof(line), iter->_f) != NULL) {
@@ -777,19 +776,18 @@ _Bool index_next(index_iterator *iter, char *result)
         line[INDEX_ENTRY_SIZE] = '\0';
 
         // TODO: if one of the specified ids was purged from the index, we will miss it
-        // that's the issue of MD5 values
 
-        /* have we found the max_id? don't return it */
+        /* have we found the max_id? stop & don't return it */
         if (iter->_max_id != NULL && strcmp(line, iter->_max_id) == 0)
-            return false;
+            return 0;
 
         if (result)
             strcpy(result, line);
-        return true;
+        return 1;
     }
 
     /* if all goes well, we should never reach this point */
-    return false;
+    return 0;
 }
 
 
@@ -1426,6 +1424,17 @@ xs_list *timeline_simple_list(snac *snac, const char *idx_name, int skip, int sh
 }
 
 
+index_iterator *timeline_iterator(snac *snac, const char *idx_name,
+                                              const char *since_id, const char *min_id,
+                                              const char *max_id, int limit)
+/* returns a timeline iterator */
+{
+    xs *idx = xs_fmt("%s/%s.idx", snac->basedir, idx_name);
+
+    return index_iter_create(idx, since_id, min_id, max_id, limit);
+}
+
+
 xs_list *timeline_list(snac *snac, const char *idx_name, int skip, int show)
 /* returns a timeline (only top level entries) */
 {
@@ -1935,7 +1944,7 @@ xs_list *tag_search(const char *tag, int skip, int show)
 
 
 index_iterator *tag_search_iterator(const char *tag, const char *since_id, const char *min_id,
-                                              const char *max_id, int limit)
+                                                     const char *max_id, int limit)
 /* returns the list of posts tagged with tag */
 {
     if (*tag == '#')
@@ -2073,6 +2082,23 @@ xs_list *list_timeline(snac *user, const char *list, int skip, int show)
         l = index_list_desc(fn, skip, show);
 
     return l;
+}
+
+
+index_iterator *list_timeline_iterator(snac *user, const char *list,
+                                       const char *since_id, const char *min_id,
+                                       const char *max_id, int limit)
+/* returns the timeline of a list */
+{
+    if (!xs_is_hex(list))
+        return NULL;
+
+    xs *fn = xs_fmt("%s/list/%s.idx", user->basedir, list);
+
+    if (mtime(fn) > 0.0)
+        return index_iter_create(fn, since_id, min_id, max_id, limit);
+
+    return NULL;
 }
 
 

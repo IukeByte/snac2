@@ -124,7 +124,7 @@ typedef struct index_iterator {
 index_iterator *index_iter_create(const char *fn, const char *since_id, const char *min_id,
                                   const char *max_id, int limit);
 void index_iter_free(index_iterator *iter);
-_Bool index_next(index_iterator *iter, char *result);
+int index_next(index_iterator *iter, char *result);
 
 
 int object_add(const char *id, const xs_dict *obj);
@@ -166,6 +166,9 @@ int timeline_here(snac *snac, const char *md5);
 int timeline_get_by_md5(snac *snac, const char *md5, xs_dict **msg);
 int timeline_del(snac *snac, const char *id);
 xs_list *timeline_simple_list(snac *snac, const char *idx_name, int skip, int show);
+index_iterator *timeline_iterator(snac *snac, const char *idx_name,
+                                              const char *since_id, const char *min_id,
+                                              const char *max_id, int limit);
 xs_list *timeline_list(snac *snac, const char *idx_name, int skip, int show);
 int timeline_add(snac *snac, const char *id, const xs_dict *o_msg);
 int timeline_admire(snac *snac, const char *id, const char *admirer, int like);
@@ -205,6 +208,9 @@ index_iterator *tag_search_iterator(const char *tag, const char *since_id, const
 
 xs_val *list_maint(snac *user, const char *list, int op);
 xs_list *list_timeline(snac *user, const char *list, int skip, int show);
+index_iterator *list_timeline_iterator(snac *user, const char *list,
+                                       const char *since_id, const char *min_id,
+                                       const char *max_id, int limit);
 xs_val *list_content(snac *user, const char *list, const char *actor_md5, int op);
 void list_distribute(snac *user, const char *who, const xs_dict *post);
 

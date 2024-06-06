@@ -1546,8 +1546,7 @@ int mastoapi_get_handler(const xs_dict *req, const char *q_path,
                 goto timeline_finish;
             }
 
-            xs *idx_fn         = xs_fmt("%s/%s.idx", snac1.basedir, "private");
-            index_iterator *it = index_iter_create(idx_fn, since_id_md5, min_id_md5, max_id_md5, 0);
+            index_iterator *it = timeline_iterator(&snac1, "private", since_id_md5, min_id_md5, max_id_md5, 0);
             xs *out            = xs_list_new();
             char v[INDEX_ENTRY_SIZE+1] = {0};
             xs *msg = NULL;
@@ -1557,9 +1556,6 @@ int mastoapi_get_handler(const xs_dict *req, const char *q_path,
                 /* get the entry */
                 if (!valid_status(timeline_get_by_md5(&snac1, v, &msg)))
                     continue;
-
-                const char *ts = xs_dict_get(msg, "published");
-                printf("[timeline] -> ts: %s\n", ts);
 
                 /* discard non-Notes */
                 const char *id   = xs_dict_get(msg, "id");
@@ -1619,9 +1615,8 @@ int mastoapi_get_handler(const xs_dict *req, const char *q_path,
         else
         if (xs_list_len(path) == 1 && strcmp(xs_list_get(path, 0), "public") == 0) { /** **/
             /* the instance public timeline (public timelines for all users) */
-            int cnt         = 0;
-            xs *idx_fn         = xs_fmt("%s/%s.idx", snac1.basedir, "public");
-            index_iterator *it = index_iter_create(idx_fn, since_id_md5, min_id_md5, max_id_md5, 0);
+            int cnt            = 0;
+            index_iterator *it = timeline_iterator(&snac1, "public", since_id_md5, min_id_md5, max_id_md5, 0);
             xs *out            = xs_list_new();
             char md5[INDEX_ENTRY_SIZE+1] = {0};
 
@@ -1714,12 +1709,12 @@ int mastoapi_get_handler(const xs_dict *req, const char *q_path,
             xs *l = xs_split(cmd, "/");
             const char *list = xs_list_get(l, -1);
 
-            xs *timeline = list_timeline(&snac1, list, 0, 2048);
-            xs *out      = xs_list_new();
-            int c = 0;
-            const char *md5;
+            index_iterator *it = list_timeline_iterator(&snac1, list, since_id_md5, min_id_md5, max_id_md5, 0);
+            xs *out = xs_list_new();
+            int cnt = 0;
+            char md5[INDEX_ENTRY_SIZE+1] = {0};
 
-            while (xs_list_next(timeline, &md5, &c)) {
+            while (cnt < limit && index_next(it, md5)) {
                 xs *msg = NULL;
 
                 /* get the entry */
@@ -1767,9 +1762,13 @@ int mastoapi_get_handler(const xs_dict *req, const char *q_path,
                 /* convert the Note into a Mastodon status */
                 xs *st = mastoapi_status(&snac1, msg);
 
-                if (st != NULL)
+                if (st != NULL) {
                     out = xs_list_append(out, st);
+                    cnt++;
+                }
             }
+
+            index_iter_free(it);
 
             *body  = xs_json_dumps(out, 4);
             *ctype = "application/json";
