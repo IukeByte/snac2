@@ -801,9 +801,9 @@ static xs_html *html_user_body(snac *user, int read_only)
             xs_html_attr("class", "snac-announcement"),
                 xs_html_text(an->text),
                 xs_html_text(" "),
-                xs_html_sctag("a",
-                        xs_html_attr("href", s)),
-                        xs_html_text("Dismiss")));
+                xs_html_tag("a",
+                        xs_html_attr("href", s),
+                        xs_html_text("Dismiss"))));
     }
 
     if (read_only) {
@@ -1632,14 +1632,18 @@ xs_html *html_entry(snac *user, xs_dict *msg, int read_only,
     v = xs_dict_get(msg, "summary");
 
     /* is it sensitive? */
-    if (user && xs_type(xs_dict_get(msg, "sensitive")) == XSTYPE_TRUE) {
+    if (xs_type(xs_dict_get(msg, "sensitive")) == XSTYPE_TRUE) {
         if (xs_is_null(v) || *v == '\0')
             v = "...";
 
-        /* only show it when not in the public timeline and the config setting is "open" */
-        const char *cw = xs_dict_get(user->config, "cw");
-        if (xs_is_null(cw) || read_only)
-            cw = "";
+        const char *cw = "";
+
+        if (user) {
+            /* only show it when not in the public timeline and the config setting is "open" */
+            cw = xs_dict_get(user->config, "cw");
+            if (xs_is_null(cw) || read_only)
+                cw = "";
+        }
 
         snac_content = xs_html_tag("details",
             xs_html_attr(cw, NULL),
@@ -2633,7 +2637,7 @@ int html_get_handler(const xs_dict *req, const char *q_path,
             xs *timestamp = xs_number_new(ts);
             srv_log(xs_fmt("user dismissed announcements until %d", ts));
             snac.config = xs_dict_set(snac.config, "last_announcement", timestamp);
-            user_persist(&snac);
+            user_persist(&snac, 0);
         }
     }
 
@@ -3380,7 +3384,7 @@ int html_post_handler(const xs_dict *req, const char *q_path,
             snac.config = xs_dict_set(snac.config, "passwd", pw);
         }
 
-        user_persist(&snac);
+        user_persist(&snac, 1);
 
         status = HTTP_STATUS_SEE_OTHER;
     }

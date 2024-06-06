@@ -6,6 +6,8 @@ Markdown-style links are now supported.
 
 The alt text in attachments that have one is also shown in a dropdown just below it (useful for environments where mouseover is not available, i.e. for phones and tablets).
 
+Instance-wide notifications has been implemented (contributed by louis77). A small tweak to the default CSS was made to suit this change; please consider updating your style.css (see doc/style.css as an example).
+
 The avatar and/or the header images can now be deleted (contributed by louis77).
 
 Code cleaning: HTTP status codes use names instead of hardcoded integers (contributed by louis77).
@@ -13,6 +15,8 @@ Code cleaning: HTTP status codes use names instead of hardcoded integers (contri
 Mastodon API: fixed login problems with the official Mastodon API, IceCube and Toot! on iOS, some fixes for Mona and Tokodon apps, user credentials can now be edited from apps (contributed by louis77).
 
 The webfinger content-type response header is now RFC-compliant (contributed by steve-bate).
+
+Improved support for the HTTP OPTIONS method, allowing sites like https://mastodonlistmanager.org to work.
 
 ## 2.53
 

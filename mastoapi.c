@@ -243,6 +243,9 @@ int oauth_post_handler(const xs_dict *req, const char *q_path,
     const char *i_ctype = xs_dict_get(req, "content-type");
     xs *args      = NULL;
 
+    if (i_ctype == NULL)
+        return 0;
+
     if (i_ctype && xs_startswith(i_ctype, "application/json")) {
         if (!xs_is_null(payload))
             args = xs_json_loads(payload);
@@ -762,6 +765,8 @@ xs_dict *mastoapi_poll(snac *snac, const xs_dict *msg)
     poll = xs_dict_append(poll, "options", options);
     xs *vc = xs_number_new(num_votes);
     poll = xs_dict_append(poll, "votes_count", vc);
+
+    poll = xs_dict_append(poll, "emojis", xs_stock(XSTYPE_LIST));
 
     poll = xs_dict_append(poll, "voted",
             (snac && was_question_voted(snac, xs_dict_get(msg, "id"))) ?
@@ -2410,6 +2415,9 @@ int mastoapi_post_handler(const xs_dict *req, const char *q_path,
     xs *args      = NULL;
     const char *i_ctype = xs_dict_get(req, "content-type");
 
+    if (i_ctype == NULL)
+        return 0;
+
     if (i_ctype && xs_startswith(i_ctype, "application/json")) {
         if (!xs_is_null(payload))
             args = xs_json_loads(payload);
@@ -3000,6 +3008,9 @@ int mastoapi_delete_handler(const xs_dict *req, const char *q_path,
     xs *args      = NULL;
     const char *i_ctype = xs_dict_get(req, "content-type");
 
+    if (i_ctype == NULL)
+        return 0;
+
     if (i_ctype && xs_startswith(i_ctype, "application/json")) {
         if (!xs_is_null(payload))
             args = xs_json_loads(payload);
@@ -3087,6 +3098,9 @@ int mastoapi_put_handler(const xs_dict *req, const char *q_path,
     int status    = HTTP_STATUS_NOT_FOUND;
     xs *args      = NULL;
     const char *i_ctype = xs_dict_get(req, "content-type");
+
+    if (i_ctype == NULL)
+        return 0;
 
     if (i_ctype && xs_startswith(i_ctype, "application/json")) {
         if (!xs_is_null(payload))
@@ -3235,6 +3249,9 @@ int mastoapi_patch_handler(const xs_dict *req, const char *q_path,
     xs *args      = NULL;
     const char *i_ctype = xs_dict_get(req, "content-type");
 
+    if (i_ctype == NULL)
+        return 0;
+
     if (i_ctype && xs_startswith(i_ctype, "application/json")) {
         if (!xs_is_null(payload))
             args = xs_json_loads(payload);
@@ -3321,7 +3338,7 @@ int mastoapi_patch_handler(const xs_dict *req, const char *q_path,
             }
 
             /* Persist profile */
-            if (user_persist(&snac) == 0)
+            if (user_persist(&snac, 1) == 0)
                 credentials_get(body, ctype, &status, snac);
             else
                 status = HTTP_STATUS_INTERNAL_SERVER_ERROR;
