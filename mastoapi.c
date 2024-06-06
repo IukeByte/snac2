@@ -1547,7 +1547,7 @@ int mastoapi_get_handler(const xs_dict *req, const char *q_path,
             }
 
             xs *idx_fn       = xs_fmt("%s/%s.idx", snac1.basedir, "private");
-            index_iter_t *it = index_iter_create(idx_fn, since_id_md5, min_id_md5, max_id_md5, limit);
+            index_iterator *it = index_iter_create(idx_fn, since_id_md5, min_id_md5, max_id_md5, limit);
             xs *out          = xs_list_new();
             const xs_str *v;
             xs *msg = NULL;
@@ -1622,7 +1622,7 @@ int mastoapi_get_handler(const xs_dict *req, const char *q_path,
             /* the instance public timeline (public timelines for all users) */
             size_t cnt       = 0;
             xs *idx_fn       = xs_fmt("%s/%s.idx", snac1.basedir, "public");
-            index_iter_t *it = index_iter_create(idx_fn, since_id_md5, min_id_md5, max_id_md5, limit);
+            index_iterator *it = index_iter_create(idx_fn, since_id_md5, min_id_md5, max_id_md5, limit);
             xs *out          = xs_list_new();
             const xs_str *md5;
 

@@ -111,18 +111,18 @@ typedef enum iter_dir {
     DESC,
 } iter_dir;
 
-typedef struct index_iter_t {
+typedef struct index_iterator {
     FILE        *_f;
     int         _fetched;
     iter_dir    _direction;
     const int   _limit;
     const char  *_max_id;
-} index_iter_t;
+} index_iterator;
 
-index_iter_t *index_iter_create(const char *fn, const char *since_id, const char *min_id, const char *max_id,
+index_iterator *index_iter_create(const char *fn, const char *since_id, const char *min_id, const char *max_id,
                                     int limit);
-void index_iter_free(index_iter_t *iter);
-xs_str *index_next(index_iter_t *iter);
+void index_iter_free(index_iterator *iter);
+xs_str *index_next(index_iterator *iter);
 
 
 int object_add(const char *id, const xs_dict *obj);

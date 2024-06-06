@@ -636,7 +636,7 @@ xs_list *index_list_desc(const char *fn, int skip, int show)
 }
 
 
-void _index_iter_seekto(index_iter_t *iter, const char *id)
+void _index_iter_seekto(index_iterator *iter, const char *id)
 /* seek to a certain position in the index */
 {
     // TODO: We have a problem when the ID is not in the index
@@ -647,7 +647,7 @@ void _index_iter_seekto(index_iter_t *iter, const char *id)
     } while (val != NULL && strcmp(val, id) != 0);
 }
 
-index_iter_t *index_iter_create(const char *fn, const char *since_id, const char *min_id, const char *max_id,
+index_iterator *index_iter_create(const char *fn, const char *since_id, const char *min_id, const char *max_id,
                              const int limit)
 /* return an index iterator to be used with index_next, returns NULL in failure case. */
 {
@@ -655,7 +655,7 @@ index_iter_t *index_iter_create(const char *fn, const char *since_id, const char
         return NULL;   /* this doesn't make sense */
 
     FILE *f;
-    index_iter_t iter = {
+    index_iterator iter = {
         ._f         = NULL,
         ._fetched   = 0,
         ._direction = DESC,
@@ -669,13 +669,6 @@ index_iter_t *index_iter_create(const char *fn, const char *since_id, const char
         flock(fileno(f), LOCK_SH);
         iter._f = f;
     } else {
-        return NULL;
-    }
-
-    index_iter_t *ret = malloc(sizeof(index_iter_t));
-    if (ret == NULL) {
-        srv_debug(0, "index_iter(): out of memory");
-        fclose(iter._f);
         return NULL;
     }
 
@@ -727,11 +720,17 @@ index_iter_t *index_iter_create(const char *fn, const char *since_id, const char
     if (start_after != NULL)
         _index_iter_seekto(&iter, start_after);
 
-    return memcpy(ret, &iter, sizeof(index_iter_t));
+    index_iterator *ret = malloc(sizeof(index_iterator));
+    if (ret == NULL) {
+        srv_debug(0, "index_iter(): out of memory");
+        fclose(iter._f);
+        return NULL;
+    }
+    return memcpy(ret, &iter, sizeof(index_iterator));
 }
 
 
-void index_iter_free(index_iter_t *iter)
+void index_iter_free(index_iterator *iter)
 /* close index iterator */
 {
     if (iter == NULL)
@@ -744,7 +743,7 @@ void index_iter_free(index_iter_t *iter)
 }
 
 
-xs_str *index_next(index_iter_t *iter)
+xs_str *index_next(index_iterator *iter)
 /* get next element from index or NULL of we reached the end or anything bad happens */
 {
     if (iter == NULL)
