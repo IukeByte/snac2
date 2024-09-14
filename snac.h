@@ -83,7 +83,8 @@ int user_persist(snac *snac, int publish);
 
 int validate_uid(const char *uid);
 
-xs_str *hash_password(const char *uid, const char *passwd, const char *nonce);
+xs_str *hash_password(const char *passwd, const char *settings);
+xs_str *hash_password_old(const char *uid, const char *passwd, const char *nonce);
 int check_password(const char *uid, const char *passwd, const char *hash);
 
 void srv_archive(const char *direction, const char *url, xs_dict *req,
