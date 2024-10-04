@@ -9,6 +9,7 @@
 
 #include "snac.h"
 
+#include <locale.h>
 #include <sys/stat.h>
 
 int usage(void)
@@ -76,6 +77,9 @@ int main(int argc, char *argv[])
     char *url;
     int argi = 1;
     snac snac;
+
+    /* use the environment's locale for character types, e.g. in regex */
+    setlocale(LC_CTYPE, "");
 
     /* ensure group has write access */
     umask(0007);
