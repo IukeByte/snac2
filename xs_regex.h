@@ -21,7 +21,11 @@ xs_list *xs_regex_replace_in(xs_str *str, const char *rx, const char *rep, int c
 #define _REGEX_NELTS(n)
 #endif
 
+#ifdef USE_TRE
+#include <tre/regex.h>
+#else
 #include <regex.h>
+#endif
 
 xs_list *xs_regex_split_n(const char *str, const char *rx, int count)
 /* splits str using regex as a separator, at most count times.

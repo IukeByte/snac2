@@ -1,0 +1,6 @@
+CFLAGS+=-DUSE_TRE
+LDFLAGS+=-ltre
+
+all clean install uninstall:
+	$(MAKE) -f Makefile CFLAGS="$(CFLAGS)" LDFLAGS="$(LDFLAGS)" $@
+
