@@ -66,6 +66,27 @@ char *get_argv(int *argi, int argc, char *argv[])
         return NULL;
 }
 
+int init_locale(void)
+{
+    char utf8lc[32];
+    char *lcdot = NULL;
+    char *lc_ctype = setlocale(LC_CTYPE, "");
+
+    if (!lc_ctype) {
+        fprintf(stderr, "Warning: setting LC_CTYPE failed, trying 'en_US.UTF-8' instead.\n");
+        lc_ctype = "en_US.UTF-8";
+    }
+    else if (!(lcdot = strchr(lc_ctype, '.')) || strcmp(lcdot+1, "UTF-8")) {
+        if (lcdot) *lcdot = 0;
+        snprintf(utf8lc, sizeof utf8lc, "%s.UTF-8", lc_ctype);
+        lc_ctype = utf8lc;
+        fprintf(stderr, "Warning: configured LC_CTYPE doesn't use UTF-8, trying '%s' instead.\n", lc_ctype);
+    }
+    else return 0;
+
+    if (setlocale(LC_CTYPE, lc_ctype)) return 0;
+    return -1;
+}
 
 #define GET_ARGV() get_argv(&argi, argc, argv)
 
@@ -78,14 +99,17 @@ int main(int argc, char *argv[])
     int argi = 1;
     snac snac;
 
-    /* use the environment's locale for character types, e.g. in regex */
-    setlocale(LC_CTYPE, "");
-
     /* ensure group has write access */
     umask(0007);
 
     if ((cmd = GET_ARGV()) == NULL)
         return usage();
+
+    /* initialize locale for LC_CTYPE, used for character classes in regex */
+    if (init_locale() < 0) {
+        fprintf(stderr, "Error initializing locale.\n");
+        return 1;
+    }
 
     if (strcmp(cmd, "init") == 0) { /** **/
         /* initialize the data storage */
