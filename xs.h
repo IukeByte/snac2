@@ -681,7 +681,7 @@ xs_str *xs_tolower_i(xs_str *str)
     int n;
 
     for (n = 0; str[n]; n++)
-        str[n] = tolower(str[n]);
+        str[n] = tolower((unsigned char)str[n]);
 
     return str;
 }
