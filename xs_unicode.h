@@ -21,6 +21,7 @@
  int xs_unicode_nfd(unsigned int cpoint, unsigned int *base, unsigned int *diac);
  int xs_unicode_nfc(unsigned int base, unsigned int diac, unsigned int *cpoint);
  int xs_unicode_is_alpha(unsigned int cpoint);
+ int xs_unicode_is_rtl(const xs_str* str);
 
 #ifdef _XS_H
  xs_str *xs_utf8_insert(xs_str *str, unsigned int cpoint, int *offset);
@@ -38,6 +39,13 @@
 #ifndef xs_countof
 #define xs_countof(a) (sizeof((a)) / sizeof((*a)))
 #endif
+
+int xs_unicode_is_rtl(const xs_str* str) {
+    if (str == NULL) {
+        return 0;
+    }
+    return (*(unsigned char*)str == 0xd7);
+}
 
 int xs_utf8_enc(char buf[4], unsigned int cpoint)
 /* encodes an Unicode codepoint to utf-8 into buf and returns the size in bytes */

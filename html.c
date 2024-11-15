@@ -12,6 +12,7 @@
 #include "xs_match.h"
 #include "xs_html.h"
 #include "xs_curl.h"
+#include "xs_unicode.h"
 
 #include "snac.h"
 
@@ -1749,6 +1750,10 @@ xs_html *html_entry(snac *user, xs_dict *msg, int read_only,
     {
         /** build the content string **/
         const char *content = xs_dict_get(msg, "content");
+        int is_rtl;
+        xs_html *snac_rtl_content = xs_html_tag("span",
+                    xs_html_attr("class", "snac-rtl"));
+
 
         if (xs_type(content) != XSTYPE_STRING) {
             if (!xs_is_null(content))
@@ -1757,6 +1762,7 @@ xs_html *html_entry(snac *user, xs_dict *msg, int read_only,
 
             content = "";
         }
+        is_rtl = xs_unicode_is_rtl(content);
 
         /* skip ugly line breaks at the beginning */
         while (xs_startswith(content, "<br>"))
@@ -1786,8 +1792,15 @@ xs_html *html_entry(snac *user, xs_dict *msg, int read_only,
         }
 
         /* c contains sanitized HTML */
-        xs_html_add(snac_content,
-            xs_html_raw(c));
+        if (is_rtl) {
+            xs_html_add(snac_rtl_content,
+                xs_html_raw(c));
+            xs_html_add(snac_content,
+                snac_rtl_content);
+        } else {
+            xs_html_add(snac_content,
+                xs_html_raw(c));
+        }
     }
 
     if (strcmp(type, "Question") == 0) { /** question content **/
